@@ -147,7 +147,7 @@ function openInCardForm(id, type, historyId = null) {
                     <input type="number" id="incard-qty-${id}" value="${defaultQty}" class="input-field !h-10 text-sm">
                 </div>
                 <div class="${isHarvest ? 'col-span-2' : ''}">
-                    <label class="text-[10px] font-bold text-slate-400 uppercase">Data (Posterior a ${p.lastUpdated})</label>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase">Data</label>
                     <input type="date" id="incard-date-${id}" value="${defaultDate}" min="${minDateStr}" class="input-field !h-10 text-sm">
                 </div>
             </div>
@@ -322,7 +322,7 @@ function render() {
                         <h3 class="font-bold text-slate-800">${p.variety}</h3>
                         <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">${p.quantity} Unid. | ${p.stage}</p>
                     </div>
-                    ${p.stage !== 'Colheita' && !p.archived ? `<button onclick="openInCardForm(${p.id}, 'next')" class=" text-white text-[10px] font-black px-3 py-2 rounded-lg uppercase shadow-sm">Próxima Etapa</button>` : ''}
+                    ${p.stage !== 'Colheita' && !p.archived ? `<button onclick="openInCardForm(${p.id}, 'next')" class="bg-emerald-500 text-white text-[10px] font-black px-3 py-2 rounded-lg uppercase shadow-sm">Próxima Etapa</button>` : ''}
                 </div>
                 <div id="in-card-area-${p.id}" class="hidden mt-4 pt-4 border-t border-dashed animate-in fade-in duration-300"></div>
                 <div class="mt-4 space-y-2 border-t pt-4">${historyHTML}</div>
