@@ -8,16 +8,17 @@ const SUPABASE_KEY = 'sb_publishable_dvUvVnNBD2yKxKS_Y30b2w_KDozTYOE';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CATALOGO = [
+    { nome: "Tomate", img: "imagens/tomate.webp" },
     { nome: "Pimento Vermelho", img: "imagens/pimento_vermelho.webp" },
-    { nome: "Pimento Verde", img: "imagens/pimento_verde.jpg" },
-    { nome: "Jalapeño", img: "imagens/jalapeno.jpg" },
-    { nome: "Habanero", img: "imagens/habanero.jpg" },
-    { nome: "Carolina Reaper", img: "imagens/reaper.jpg" },
-    { nome: "Piri-Piri", img: "imagens/piripiri.jpg" },
-    { nome: "Pimento Padrón", img: "imagens/padron.jpg" }
+    { nome: "Pimento Laranja", img: "imagens/pimento_laranja.webp" },
+    { nome: "Pimento Amarelo", img: "imagens/pimento_amarelo.webp" },
+    { nome: "Pimento Verde", img: "imagens/pimento_verde.webp" },
+    { nome: "Jalapeño", img: "imagens/jalapeno.webp" },
+    { nome: "Habanero Vermelho", img: "imagens/habanero_vermelho.webp" },
+    { nome: "Carolina Reaper", img: "imagens/carolina_reaper.webp" }
 ];
 
-const IMG_DEFAULT = "imagens/default.png";
+const IMG_DEFAULT = "imagens/default.webp";
 let plants = [];
 let isSignUpMode = false;
 
@@ -119,43 +120,51 @@ function openInCardForm(id, type, historyId = null) {
     let defaultDate = new Date().toISOString().split('T')[0];
     let action = "";
     let isHarvest = false;
-
-    // Determinar a data mínima (deve ser pelo menos 1 dia após a última etapa)
-    const lastDate = new Date(p.lastUpdated);
-    lastDate.setDate(lastDate.getDate() + 1);
-    const minDateStr = lastDate.toISOString().split('T')[0];
+    let minDateStr = "";
 
     if (type === 'next') {
         const nextStage = p.stage === "Germinação" ? "Plantação" : "Colheita";
         isHarvest = nextStage === "Colheita";
         title = `Avançar para: ${nextStage}`;
         action = `submitNextStage(${id}, '${nextStage}')`;
+        minDateStr = p.lastUpdated; 
     } else {
         const hItem = p.history.find(h => h.id === historyId);
+        const hIndex = p.history.findIndex(h => h.id === historyId);
+        
+        // Verifica se o item que estamos a EDITAR é uma colheita
+        isHarvest = hItem.text.includes("Colheita");
+        
         title = `Corrigir Etapa`;
         defaultQty = parseInt(hItem.text.match(/\d+/) || p.quantity);
         defaultDate = hItem.date;
         action = `submitHistoryEdit(${id}, ${historyId})`;
+
+        if (hIndex > 0) {
+            minDateStr = p.history[hIndex - 1].date;
+        }
     }
 
     area.innerHTML = `
         <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-            <p class="text-[10px] font-black text-slate-500 uppercase">${title}</p>
+            <p class="text-[9px] font-black text-slate-500 uppercase">${title}</p>
             <div class="grid grid-cols-2 gap-2">
                 <div class="${isHarvest ? 'hidden' : ''}">
-                    <label class="text-[10px] font-bold text-slate-400 uppercase">Quantidade</label>
+                    <label class="text-[8px] font-bold text-slate-400 uppercase">Quantidade</label>
                     <input type="number" id="incard-qty-${id}" value="${defaultQty}" class="input-field !h-10 text-sm">
                 </div>
                 <div class="${isHarvest ? 'col-span-2' : ''}">
-                    <label class="text-[10px] font-bold text-slate-400 uppercase">Data</label>
-                    <input type="date" id="incard-date-${id}" value="${defaultDate}" min="${minDateStr}" class="input-field !h-10 text-sm">
+                    <label class="text-[8px] font-bold text-slate-400 uppercase">Data</label>
+                    <input type="date" id="incard-date-${id}" value="${defaultDate}" 
+                           ${minDateStr ? `min="${minDateStr}"` : ''} 
+                           class="input-field !h-10 text-sm">
                 </div>
             </div>
             
             <div id="incard-harvest-area-${id}" class="${isHarvest ? '' : 'hidden'} space-y-2">
-                <label class="text-[10px] font-bold text-orange-500 uppercase">Frutos por planta:</label>
+                <label class="text-[8px] font-bold text-orange-500 uppercase">Frutos por planta:</label>
                 <div id="incard-harvest-grid-${id}" class="grid grid-cols-4 gap-1"></div>
-                <div class="text-[10px] font-bold text-orange-700 bg-orange-50 p-2 rounded border border-orange-100 flex justify-between">
+                <div class="text-[9px] font-bold text-orange-700 bg-orange-50 p-2 rounded border border-orange-100 flex justify-between">
                     <span>TOTAL:</span> <span id="total-harvest-display-${id}">0</span>
                 </div>
             </div>
@@ -167,10 +176,22 @@ function openInCardForm(id, type, historyId = null) {
         </div>
     `;
 
-    if (isHarvest || (type === 'edit' && p.history.find(h => h.id === historyId).text.includes("Colheita"))) {
+    // Se for colheita, gera os inputs baseando-se na etapa anterior (Plantação)
+    if (isHarvest) {
         const grid = document.getElementById(`incard-harvest-grid-${id}`);
         grid.innerHTML = "";
-        for(let i=1; i <= p.quantity; i++) {
+        
+        // Procuramos a quantidade de plantas na etapa anterior à colheita
+        let plantasVivas = p.quantity;
+        if (type === 'edit') {
+            const hIndex = p.history.findIndex(h => h.id === historyId);
+            if (hIndex > 0) {
+                const prevText = p.history[hIndex-1].text;
+                plantasVivas = parseInt(prevText.match(/(\d+)\//)?.[1] || prevText.match(/\d+/)[0]);
+            }
+        }
+
+        for(let i=1; i <= plantasVivas; i++) {
             grid.innerHTML += `<input type="number" class="incard-harvest-input input-field !p-1 !h-8 text-center text-xs border-orange-200" placeholder="P${i}" oninput="calculateTotalHarvest()">`;
         }
     }
@@ -215,52 +236,66 @@ async function submitNextStage(id, nextStage) {
 
 async function submitHistoryEdit(pId, hId) {
     const p = plants.find(x => x.id == pId);
-    const newQty = parseInt(document.getElementById(`incard-qty-${pId}`).value);
+    const newQty = parseInt(document.getElementById(`incard-qty-${pId}`).value) || 0;
     const newDate = document.getElementById(`incard-date-${pId}`).value;
     
     let history = [...p.history];
     const index = history.findIndex(h => h.id === hId);
 
-    // 1. Atualiza o item editado
-    if (history[index].text.includes("Germinação")) {
+    // 1. Atualiza a etapa que estás a editar no momento
+    if (history[index].text.includes("Colheita")) {
+        // Lógica de Colheita (Tabela)
+        let total = 0;
+        let rows = "";
+        const inputs = document.querySelectorAll('.incard-harvest-input');
+        const days = calculateDays(p.startDate, newDate);
+        inputs.forEach((input, i) => {
+            const val = parseInt(input.value) || 0;
+            total += val;
+            rows += `<tr><td class="border px-2 py-1">P${i+1}</td><td class="border px-2 py-1 text-center font-bold text-orange-600">${val}</td></tr>`;
+        });
+        history[index].text = `<div class="mb-1 text-orange-600 font-bold">🍎 Colheita: Total ${total} frutos (Dia ${days})</div><table class="w-full text-[8px] border border-orange-100 bg-orange-50/30"><tbody>${rows}</tbody></table>`;
+    } else if (index === 0) {
+        // Se editou Germinação, atualiza o texto base
         history[index].text = `🌱 Germinação: ${newQty} sementes iniciadas.`;
-        history[index].date = newDate;
-    } else if (history[index].text.includes("Plantação")) {
-        const sementesQty = parseInt(history[0].text.match(/\d+/)[0]);
-        // Validação na edição direta da plantação
-        if (newQty > sementesQty) return alert(`Limite máximo de ${sementesQty} plantas!`);
-        
-        const taxa = Math.round((newQty / sementesQty) * 100);
-        const dias = calculateDays(history[0].date, newDate);
-        history[index].text = `🌿 Plantação: ${newQty}/${sementesQty} plantas. Taxa: ${taxa}% (Dia ${dias}).`;
-        history[index].date = newDate;
+    } else {
+        // Se editou Plantação diretamente
+        const germQty = parseInt(history[0].text.match(/\d+/) || 0);
+        const taxa = germQty > 0 ? Math.round((newQty / germQty) * 100) : 0;
+        const days = calculateDays(p.startDate, newDate);
+        history[index].text = `🌿 Plantação: ${newQty}/${germQty} plantas. Taxa: ${taxa}% (Dia ${days}).`;
     }
 
-    // 2. CASCATA: Se mudei a Germinação, a Plantação tem de se ajustar
+    history[index].date = newDate;
+
+    // 2. SINCRONIZAÇÃO EM CASCATA: Se mudaste sementes, atualiza a taxa da plantação abaixo
     if (index === 0 && history.length > 1) {
-        const plantIndex = history.findIndex(h => h.text.includes("Plantação"));
-        if (plantIndex !== -1) {
-            let plantQty = parseInt(history[plantIndex].text.match(/\d+/)[0]);
-            
-            // Se as sementes agora são menos que as plantas, as plantas baixam para o novo máximo
-            if (plantQty > newQty) plantQty = newQty;
-            
-            const novaTaxa = Math.round((plantQty / newQty) * 100);
-            const novosDias = calculateDays(newDate, history[plantIndex].date);
-            history[plantIndex].text = `🌿 Plantação: ${plantQty}/${newQty} plantas. Taxa: ${novaTaxa}% (Dia ${novosDias}).`;
-        }
+        const plantacaoItem = history[1];
+        // Extrai quantas plantas vivas já existiam no texto da plantação
+        const plantasVivasMatch = plantacaoItem.text.match(/Plantação: (\d+)\//);
+        let plantasVivas = plantasVivasMatch ? parseInt(plantasVivasMatch[1]) : 0;
+        
+        // Impede que o número de plantas seja maior que o novo número de sementes
+        if (plantasVivas > newQty) plantasVivas = newQty;
+        
+        const novaTaxa = newQty > 0 ? Math.round((plantasVivas / newQty) * 100) : 0;
+        const diasPlantação = calculateDays(p.startDate, plantacaoItem.date);
+        
+        // RECONSTRÓI a string para garantir que a percentagem atualiza
+        history[1].text = `🌿 Plantação: ${plantasVivas}/${newQty} plantas. Taxa: ${novaTaxa}% (Dia ${diasPlantação}).`;
     }
 
-    // 3. Update Final
+    // 3. Atualizar o Card Principal e o Supabase
+    const isLatest = index === history.length - 1;
     const updateData = { history: history };
-    if (index === 0) updateData.startDate = newDate;
-    
-    // Atualiza a quantidade global do card baseada no último estado do histórico
-    const lastHistoryItem = history[history.length - 1];
-    updateData.quantity = parseInt(lastHistoryItem.text.match(/\d+/)[0]);
-    updateData.lastUpdated = lastHistoryItem.date;
+    if (isLatest) {
+        updateData.quantity = newQty;
+        updateData.lastUpdated = newDate;
+    }
 
-    await _supabase.from('plants').update(updateData).eq('id', pId);
+    const { error } = await _supabase.from('plants').update(updateData).eq('id', pId);
+    if (error) alert("Erro: " + error.message);
+    
     loadFromSupabase();
 }
 
