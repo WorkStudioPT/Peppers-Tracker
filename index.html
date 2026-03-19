@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌱 Garden Tracker</title>
+    <title>🌱 Garden</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -12,10 +12,11 @@
 
 <!-- AUTH OVERLAY -->
 <div id="authOverlay">
+    <button class="btn-icon" onclick="toggleDark()" title="Modo escuro" id="authDarkToggleBtn" style="position:absolute;top:16px;right:16px">🌙</button>
     <div class="auth-box">
         <div style="text-align:center;margin-bottom:28px">
             <div style="font-size:40px;margin-bottom:10px">🌱</div>
-            <div style="font-family:'Lora',serif;font-size:22px;font-weight:700;color:var(--text)">Garden Tracker</div>
+            <div style="font-family:'Lora',serif;font-size:22px;font-weight:700;color:var(--text)">Garden</div>
             <div id="authSubtitle" style="font-size:11px;color:var(--text-muted);margin-top:4px;letter-spacing:0.5px">Bem-vindo de volta</div>
         </div>
         <div class="space-y">
@@ -27,7 +28,7 @@
                 <label class="field-label">Password</label>
                 <input type="password" id="authPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')handleAuth()">
             </div>
-            <button onclick="handleAuth()" id="authPrimaryBtn" class="btn-primary" style="width:100%;margin-top:6px">Entrar</button>
+            <button onclick="handleAuth()" id="authPrimaryBtn" class="btn-primary" style="width:100%;margin-top:35px">Entrar</button>
             <div style="text-align:center">
                 <button onclick="toggleAuthMode()" id="authSecondaryBtn" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text-muted);font-weight:600">
                     Não tens conta? <span style="color:var(--green)">Criar registo</span>
@@ -42,7 +43,7 @@
 
     <!-- TOP BAR -->
     <div class="top-bar">
-        <div class="app-logo">🌱 Garden Tracker</div>
+        <div class="app-logo">🌱 Garden</div>
         <div class="top-right">
             <div class="user-badge" id="userEmailLabel"></div>
             <button class="btn-icon" onclick="toggleDark()" title="Modo escuro" id="darkToggleBtn">🌙</button>
@@ -54,7 +55,7 @@
 
         <!-- TABS -->
         <div class="tabs">
-            <button class="tab-btn active" id="tab-tracker" onclick="switchTab('tracker')">🌶️ Pepper Tracker</button>
+            <button class="tab-btn active" id="tab-tracker" onclick="switchTab('tracker')">🌶️ Tracker</button>
             <button class="tab-btn"        id="tab-tray"    onclick="switchTab('tray')">🌿 Tabuleiros</button>
         </div>
 

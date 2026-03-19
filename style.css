@@ -570,7 +570,7 @@ input[type="number"] { text-align: center; }
 @media (max-width: 899px) {
     .top-bar  { padding: 0 14px; height: 52px; }
     .app-wrap { padding: 0 12px; }
-    .user-badge { max-width: 200px;}
+    .user-badge { max-width: 150px;}
     .app-logo { font-size: 15px; }
     .tabs { margin: 14px 0; }
     .tab-btn { font-size: 11px; padding: 9px 6px; }

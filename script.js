@@ -90,7 +90,10 @@ function toggleDark() {
     const html   = document.documentElement;
     const isDark = html.getAttribute('data-theme') === 'dark';
     html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    document.getElementById('darkToggleBtn').textContent = isDark ? '🌙' : '☀️';
+    const icon = isDark ? '🌙' : '☀️';
+    document.getElementById('darkToggleBtn').textContent = icon;
+    const authBtn = document.getElementById('authDarkToggleBtn');
+    if (authBtn) authBtn.textContent = icon;
     localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
 
@@ -99,7 +102,10 @@ function toggleDark() {
     if (saved) {
         document.documentElement.setAttribute('data-theme', saved);
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('darkToggleBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+            const icon = saved === 'dark' ? '☀️' : '🌙';
+            document.getElementById('darkToggleBtn').textContent = icon;
+            const authBtn = document.getElementById('authDarkToggleBtn');
+            if (authBtn) authBtn.textContent = icon;
         });
     }
 })();
@@ -366,7 +372,7 @@ function render() {
         const historyHTML = p.history.map(h => `
             <div class="timeline-item">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;opacity:0.65">
-                    <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:300">${h.date}</span>
+                    <span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600">${h.date}</span>
                     <div style="display:flex;gap:10px">
                         <span onclick="openInCardForm(${p.id}, 'edit', ${h.id})"
                             style="cursor:pointer;font-size:10px;font-weight:700;color:#26c800">Editar</span>
@@ -380,7 +386,7 @@ function render() {
         const card = `
             <div class="plant-card ${p.archived ? 'archived' : ''} fade-in">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                    <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint)">📅 ${p.startDate}</span>
+                    <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-faint)">📅 ${p.startDate}</span>
                     <div style="display:flex;gap:8px;align-items:center">
                         <span class="badge ${stageColor}">${p.stage}</span>
                         <span class="badge badge-muted">${days}d</span>
