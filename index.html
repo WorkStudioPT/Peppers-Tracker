@@ -47,7 +47,7 @@
         <div class="top-right">
             <div class="user-badge" id="userEmailLabel"></div>
             <button class="btn-icon" onclick="toggleDark()" title="Modo escuro" id="darkToggleBtn">🌙</button>
-            <button class="btn-icon" onclick="handleLogout()" title="Sair" style="color:var(--red)">↩</button>
+            <button class="btn-icon" onclick="handleLogout()" title="Sair" style="color:var(--red)">❌</button>
         </div>
     </div>
 
@@ -85,7 +85,7 @@
                     <div style="display:flex;gap:8px;align-items:flex-end">
                         <div style="flex:1">
                             <label class="field-label">Etapa</label>
-                            <select id="stage" onchange="updateQtyLabel()" style="height:44px">
+                            <select id="stage" onchange="updateQtyLabel()" style="height:44px;padding-left: 10px;">
                                 <option value="Germinação">🌱 Germinação</option>
                                 <option value="Plantação">🌿 Plantação</option>
                                 <option value="Colheita">🍎 Colheita</option>
