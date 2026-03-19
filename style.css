@@ -565,8 +565,8 @@ input[type="number"] { text-align: center; }
 
 /* ── RESPONSIVE ───────────────────────── */
 
-/* ─ Mobile: up to 520px ─ */
-@media (max-width: 520px) {
+/* ─ Mobile + Tablet: até 899px ─ */
+@media (max-width: 899px) {
     .top-bar  { padding: 0 14px; height: 52px; }
     .app-wrap { padding: 0 12px; }
     .user-badge { max-width: 90px; font-size: 9px; padding: 3px 8px; }
@@ -579,9 +579,11 @@ input[type="number"] { text-align: center; }
     .plant-img-wrap { width: 48px; height: 48px; }
     .modal-box { padding: 20px 18px; }
 
-    /* Tray tab: sidebar goes on top, trays below */
+    /* Tray: sidebar empilha em cima, largura total */
     .tray-layout { flex-direction: column; gap: 12px; }
     .tray-sidebar { width: 100% !important; }
+    .tray-sidebar > .btn-primary,
+    .tray-sidebar .space-y > .btn-primary { width: 100% !important; }
     #tray-seed-library {
         flex-direction: row !important;
         flex-wrap: wrap !important;
@@ -589,30 +591,21 @@ input[type="number"] { text-align: center; }
         gap: 6px !important;
     }
     .seed-item { padding: 7px 10px; font-size: 12px; }
+
+    /* Tabuleiros: largura total e grelha centrada */
+    .tray-main { width: 100% !important; }
+    .tray-wrapper { width: 100% !important; }
+    .tray-wrapper [style*="overflow-x:auto"],
+    .tray-wrapper [style*="overflow-x: auto"] {
+        display: flex;
+        justify-content: center;
+    }
 }
 
-/* ─ Tablet: 521px – 899px ─ */
+/* ─ Tablet largo: 521px – 899px ─ */
 @media (min-width: 521px) and (max-width: 899px) {
     .app-wrap { padding: 0 16px; }
     .user-badge { max-width: 130px; }
-
-    /* Tray tab: sidebar stacks above, two sidebar cards side by side */
-    .tray-layout { flex-direction: column; gap: 12px; }
-    .tray-sidebar {
-        width: 100% !important;
-        display: flex !important;
-        gap: 12px !important;
-        align-items: flex-start !important;
-    }
-    .tray-sidebar > .card {
-        flex: 1 !important;
-        margin-bottom: 0 !important;
-    }
-    #tray-seed-library {
-        flex-direction: row !important;
-        flex-wrap: wrap !important;
-        max-height: 130px !important;
-    }
 }
 
 /* ─ Desktop: 900px+ ─ */
@@ -620,6 +613,9 @@ input[type="number"] { text-align: center; }
     .app-wrap { padding: 0 32px; }
     .tabs { max-width: 900px; margin: 20px auto; }
     .tray-sidebar { width: 220px !important; }
+    /* Botões dentro da sidebar ocupam largura total da sidebar */
+    .tray-sidebar > .btn-primary,
+    .tray-sidebar .space-y > .btn-primary { width: 100% !important; }
 }
 
 /* ─ Large Desktop: 1200px+ ─ */
