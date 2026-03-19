@@ -124,9 +124,10 @@ body {
     color: var(--text-muted);
     background: var(--bg-subtle);
     border: 1px solid var(--border);
-    padding: 4px 10px; border-radius: 20px;
-    max-width: 160px;
+    padding: 4px 10px; border-radius: 10px;
+    max-width: 300px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    height: 34px; align-content: center;
 }
 
 .btn-icon {
@@ -569,7 +570,7 @@ input[type="number"] { text-align: center; }
 @media (max-width: 899px) {
     .top-bar  { padding: 0 14px; height: 52px; }
     .app-wrap { padding: 0 12px; }
-    .user-badge { max-width: 90px; font-size: 9px; padding: 3px 8px; }
+    .user-badge { max-width: 200px;}
     .app-logo { font-size: 15px; }
     .tabs { margin: 14px 0; }
     .tab-btn { font-size: 11px; padding: 9px 6px; }
@@ -605,7 +606,7 @@ input[type="number"] { text-align: center; }
 /* ─ Tablet largo: 521px – 899px ─ */
 @media (min-width: 521px) and (max-width: 899px) {
     .app-wrap { padding: 0 16px; }
-    .user-badge { max-width: 130px; }
+    .user-badge { max-width: 200px; }
 }
 
 /* ─ Desktop: 900px+ ─ */
