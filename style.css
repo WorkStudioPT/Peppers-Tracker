@@ -348,6 +348,48 @@ input[type="number"] { text-align: center; }
 }
 .archive-summary:hover { color: var(--text-muted); }
 
+/* ── COLLAPSIBLE SECTIONS ─────────────── */
+
+.collapsible-section { margin-bottom: 10px; }
+
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    list-style: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    transition: background 0.15s, border-color 0.15s;
+    user-select: none;
+}
+.collapsible-header::-webkit-details-marker { display: none; }
+.collapsible-header:hover { border-color: var(--border-focus); color: var(--green); }
+
+.collapsible-section[open] > .collapsible-header {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+}
+
+.collapsible-arrow {
+    font-size: 12px;
+    transition: transform 0.2s;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+.collapsible-section[open] > .collapsible-header .collapsible-arrow {
+    transform: rotate(180deg);
+}
+
 /* ── TRAY CELLS ───────────────────────── */
 
 .tray-cell {

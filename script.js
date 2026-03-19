@@ -82,6 +82,16 @@ function toggleAuthMode() {
 
 async function handleLogout() { await _supabase.auth.signOut(); }
 
+async function handleForgotPassword() {
+    const email = document.getElementById('authEmail').value.trim();
+    if (!email) return alert('Introduz o teu email primeiro.');
+    const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.href
+    });
+    if (error) alert('Erro: ' + error.message);
+    else alert('Email de recuperação enviado para ' + email + '. Verifica a caixa de entrada.');
+}
+
 // ════════════════════════════════════════════════════════
 // DARK MODE
 // ════════════════════════════════════════════════════════
@@ -364,6 +374,7 @@ function render() {
     const list    = document.getElementById('plantList');
     const archive = document.getElementById('archiveList');
     list.innerHTML = ''; archive.innerHTML = '';
+    let activeIdx = 0, archiveIdx = 0;
 
     plants.forEach(p => {
         const days       = calculateDays(p.startDate, new Date());
@@ -383,15 +394,8 @@ function render() {
                 <div class="timeline-text">${h.text}</div>
             </div>`).join('');
 
-        const card = `
-            <div class="plant-card ${p.archived ? 'archived' : ''} fade-in">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                    <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-faint)">📅 ${p.startDate}</span>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <span class="badge ${stageColor}">${p.stage}</span>
-                        <span class="badge badge-muted">${days}d</span>
-                    </div>
-                </div>
+        const cardInner = `
+            <div class="plant-card ${p.archived ? 'archived' : ''} fade-in" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
                 <div style="display:flex;gap:14px;align-items:center;margin-bottom:14px">
                     <div class="plant-img-wrap">
                         <img src="${p.imgUrl}" onerror="this.src='${IMG_DEFAULT}'">
@@ -418,7 +422,25 @@ function render() {
                 </div>
             </div>`;
 
-        p.archived ? archive.innerHTML += card : list.innerHTML += card;
+        const isFirst = p.archived ? archiveIdx === 0 : activeIdx === 0;
+        const card = `
+            <details class="collapsible-section" ${isFirst ? 'open' : ''}>
+                <summary class="collapsible-header">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span class="badge badge-muted">${p.startDate}</span>
+                        <span style="font-family:'Lora',serif;font-size:14px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0">${p.variety}</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <span class="badge ${stageColor}">${p.stage}</span>
+                        <span class="badge badge-muted">${days}d</span>
+                        <span class="collapsible-arrow">▾</span>
+                    </div>
+                </summary>
+                ${cardInner}
+            </details>`;
+
+        if (p.archived) { archive.innerHTML += card; archiveIdx++; }
+        else            { list.innerHTML    += card; activeIdx++; }
     });
 
     document.getElementById('archiveCount').innerText =
@@ -639,6 +661,47 @@ function createTray()         { tCreateTrayDB(); }
 function tDeleteTray(id)      { tDeleteTrayDB(id); }
 function tRenameTray(id, val) { tRenameTrayDB(id, val); }
 
+function openEditTrayModal(id) {
+    const tray = tState.trays.find(t => t.id === id);
+    if (!tray) return;
+    document.getElementById('editTrayId').value   = id;
+    document.getElementById('editTrayName').value = tray.name;
+    document.getElementById('editTrayCols').value = tray.cols;
+    document.getElementById('editTrayRows').value = tray.rows;
+    document.getElementById('editTrayModal').classList.add('open');
+    setTimeout(() => document.getElementById('editTrayName').focus(), 100);
+}
+
+function closeEditTrayModal() { document.getElementById('editTrayModal').classList.remove('open'); }
+
+async function saveEditTray() {
+    const id   = parseInt(document.getElementById('editTrayId').value);
+    const name = document.getElementById('editTrayName').value.trim() || 'Tabuleiro';
+    const cols = Math.max(1, Math.min(20, parseInt(document.getElementById('editTrayCols').value) || 4));
+    const rows = Math.max(1, Math.min(20, parseInt(document.getElementById('editTrayRows').value) || 4));
+
+    const tray = tState.trays.find(t => t.id === id);
+    if (!tray) return;
+
+    // Redimensionar células mantendo as existentes
+    const newCells = Array.from({ length: rows }, (_, ri) =>
+        Array.from({ length: cols }, (_, ci) =>
+            (tray.cells[ri] && tray.cells[ri][ci]) ? tray.cells[ri][ci] : null
+        )
+    );
+
+    const { error } = await _supabase.from('trays').update({ name, cols, rows, cells: newCells }).eq('id', id);
+    if (error) return alert('Erro ao guardar: ' + error.message);
+
+    tray.name  = name;
+    tray.cols  = cols;
+    tray.rows  = rows;
+    tray.cells = newCells;
+
+    closeEditTrayModal();
+    tRenderTrays();
+}
+
 // ── HELPERS: imagem de uma seed ────────────────────────
 
 function getSeedImg(s) {
@@ -706,7 +769,7 @@ function tRenderTrays() {
         return;
     }
 
-    c.innerHTML = tState.trays.map(tray => {
+    c.innerHTML = tState.trays.map((tray, trayIdx) => {
         const filled = tray.cells.flat().filter(Boolean).length;
         const total  = tray.rows * tray.cols;
         const colW   = Math.max(54, Math.min(86, Math.floor(380 / tray.cols) - 6));
@@ -760,29 +823,37 @@ function tRenderTrays() {
         }).join('');
 
         return `
-            <div class="tray-wrapper">
-                <div class="tray-header">
+            <details class="collapsible-section" ${trayIdx === 0 ? 'open' : ''}>
+                <summary class="collapsible-header">
                     <div style="display:flex;align-items:center;gap:10px">
                         <span class="badge badge-muted">${tray.cols}×${tray.rows}</span>
                         <input class="tray-name-input" value="${tray.name}"
+                            onclick="event.stopPropagation()"
                             onblur="tRenameTray(${tray.id},this.value)"
                             onkeydown="if(event.key==='Enter')this.blur()">
                     </div>
                     <div style="display:flex;align-items:center;gap:12px">
                         <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-faint)">${filled}/${total}</span>
-                        <button onclick="tDeleteTray(${tray.id})"
+                        <button onclick="event.stopPropagation();openEditTrayModal(${tray.id})"
+                            style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)"
+                            onmouseover="this.style.color='var(--green)'"
+                            onmouseout="this.style.color='var(--text-faint)'" title="Editar">✏️</button>
+                        <button onclick="event.stopPropagation();tDeleteTray(${tray.id})"
                             style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)"
                             onmouseover="this.style.color='var(--red)'"
                             onmouseout="this.style.color='var(--text-faint)'">🗑</button>
+                        <span class="collapsible-arrow">▾</span>
                     </div>
-                </div>
-                <div style="padding:16px;overflow-x:auto">
-                    <div style="display:grid;grid-template-columns:repeat(${tray.cols},${colW}px);gap:5px;width:fit-content">
-                        ${cellsHTML}
+                </summary>
+                <div class="tray-wrapper" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+                    <div style="padding:16px;overflow-x:auto">
+                        <div style="display:grid;grid-template-columns:repeat(${tray.cols},${colW}px);gap:5px;width:fit-content">
+                            ${cellsHTML}
+                        </div>
                     </div>
+                    ${legend ? `<div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px">${legend}</div>` : ''}
                 </div>
-                ${legend ? `<div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px">${legend}</div>` : ''}
-            </div>`;
+            </details>`;
     }).join('');
 }
 
@@ -939,4 +1010,7 @@ document.getElementById('cellModal').addEventListener('click', function(e) {
 });
 document.getElementById('newTrayModal').addEventListener('click', function(e) {
     if (e.target === this) closeNewTrayModal();
+});
+document.getElementById('editTrayModal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditTrayModal();
 });
