@@ -1,104 +1,232 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌶️ Pepper Tracker Pro</title>
+    <title>🌱 Garden Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body class="p-4 bg-[#f1f5f9] pb-24 font-['Inter'] text-slate-800">
+<body>
 
-    <div id="authOverlay" class="fixed inset-0 bg-slate-100 z-[9999] flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-200">
-            <div class="text-center mb-8">
-                <span class="text-4xl">🌶️</span>
-                <h2 id="authTitle" class="text-xl font-black text-slate-800 mt-2 uppercase tracking-tight">Entrar</h2>
+<!-- AUTH OVERLAY -->
+<div id="authOverlay">
+    <div class="auth-box">
+        <div style="text-align:center;margin-bottom:28px">
+            <div style="font-size:40px;margin-bottom:10px">🌱</div>
+            <div style="font-family:'Lora',serif;font-size:22px;font-weight:700;color:var(--text)">Garden Tracker</div>
+            <div id="authSubtitle" style="font-size:11px;color:var(--text-muted);margin-top:4px;letter-spacing:0.5px">Bem-vindo de volta</div>
+        </div>
+        <div class="space-y">
+            <div>
+                <label class="field-label">Email</label>
+                <input type="email" id="authEmail" placeholder="o-teu@email.com">
             </div>
-            <div class="space-y-4">
-                <input type="email" id="authEmail" placeholder="Email" class="input-field w-full">
-                <input type="password" id="authPassword" placeholder="Password" class="input-field w-full">
-                <div class="flex flex-col gap-3 pt-2">
-                    <button onclick="handleAuth()" id="authPrimaryBtn" class="btn-primary w-full shadow-lg">Entrar</button>
-                    <button onclick="toggleAuthMode()" id="authSecondaryBtn" class="text-[10px] font-bold text-slate-400 uppercase hover:text-emerald-600 text-center">Não tens conta? Criar Registo</button>
-                </div>
+            <div>
+                <label class="field-label">Password</label>
+                <input type="password" id="authPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')handleAuth()">
+            </div>
+            <button onclick="handleAuth()" id="authPrimaryBtn" class="btn-primary" style="width:100%;margin-top:6px">Entrar</button>
+            <div style="text-align:center">
+                <button onclick="toggleAuthMode()" id="authSecondaryBtn" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text-muted);font-weight:600">
+                    Não tens conta? <span style="color:var(--green)">Criar registo</span>
+                </button>
             </div>
         </div>
     </div>
+</div>
 
-    <div id="appContent" class="max-w-xl mx-auto hidden">
-        
-        <div class="flex justify-between items-center mb-6 bg-white px-4 py-2 rounded-full border border-slate-200 shadow-sm">
-            <span id="userEmailLabel" class="text-[10px] font-bold text-slate-500 uppercase"></span>
-            <button onclick="handleLogout()" class="text-[10px] font-black text-red-400 uppercase hover:bg-red-50 px-3 py-1 rounded-full">Sair 🚪</button>
+<!-- APP SHELL -->
+<div id="appContent" style="display:none">
+
+    <!-- TOP BAR -->
+    <div class="top-bar">
+        <div class="app-logo">🌱 Garden Tracker</div>
+        <div class="top-right">
+            <div class="user-badge" id="userEmailLabel"></div>
+            <button class="btn-icon" onclick="toggleDark()" title="Modo escuro" id="darkToggleBtn">🌙</button>
+            <button class="btn-icon" onclick="handleLogout()" title="Sair" style="color:var(--red)">↩</button>
+        </div>
+    </div>
+
+    <div class="app-wrap">
+
+        <!-- TABS -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-tracker" onclick="switchTab('tracker')">🌶️ Pepper Tracker</button>
+            <button class="tab-btn"        id="tab-tray"    onclick="switchTab('tray')">🌿 Tabuleiros</button>
         </div>
 
-        <header class="mb-6 text-center pt-4">
-            <h1 class="text-2xl font-extrabold text-[#1e293b] flex items-center justify-center gap-2">
-                <span>🌶️</span> Pepper Tracker
-            </h1>
-        </header>
+        <!-- TAB: PEPPER TRACKER -->
+        <div id="panel-tracker" class="fade-in">
 
-        <div id="formContainer" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8 transition-all">
-            <h2 id="formTitle" class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 border-b pb-2">Novo Registo</h2>
-            <input type="hidden" id="editId">
-            
-            <div class="space-y-4">
-                <div class="flex gap-3">
-                    <div class="flex-1">
-                        <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase">Variedade</label>
-                        <input type="text" id="variety" list="pepperCatalog" placeholder="Ex: Jalapeño" class="input-field">
-                        <datalist id="pepperCatalog"></datalist>
+            <div class="card" id="trackerForm">
+                <div class="section-label" id="formTitle">Novo Registo</div>
+                <input type="hidden" id="editId">
+                <div class="space-y">
+                    <div class="form-grid-3">
+                        <div>
+                            <label class="field-label">Variedade</label>
+                            <input type="text" id="variety" list="pepperCatalog" placeholder="Ex: Jalapeño">
+                            <datalist id="pepperCatalog"></datalist>
+                        </div>
+                        <div>
+                            <label class="field-label" id="labelQty">Sementes</label>
+                            <input type="number" id="quantity" value="1" min="1"
+                                oninput="if(document.getElementById('stage').value==='Colheita')renderHarvestInputs('quantity','individualPlantsContainer','harvest-plant-input')">
+                        </div>
+                        <div>
+                            <label class="field-label">Data</label>
+                            <input type="date" id="startDate">
+                        </div>
                     </div>
-                    <div class="w-28">
-                        <label id="labelQty" class="text-[10px] font-bold text-slate-500 ml-1 uppercase">Sementes</label>
-                        <input type="number" id="quantity" value="1" min="1" class="input-field-number w-full">
+                    <div style="display:flex;gap:8px;align-items:flex-end">
+                        <div style="flex:1">
+                            <label class="field-label">Etapa</label>
+                            <select id="stage" onchange="updateQtyLabel()" style="height:44px">
+                                <option value="Germinação">🌱 Germinação</option>
+                                <option value="Plantação">🌿 Plantação</option>
+                                <option value="Colheita">🍎 Colheita</option>
+                            </select>
+                        </div>
+                        <button id="mainBtn" onclick="handleAction()" class="btn-primary" style="flex:0 0 auto;white-space:nowrap;height:44px;padding:0 24px">Gravar</button>
+                        <button id="cancelBtn" onclick="resetForm()" class="btn-ghost" style="display:none;flex:0 0 auto;height:44px">✕ Cancelar</button>
+                    </div>
+                    <div id="harvestInputContainer" style="display:none">
+                        <label class="field-label" style="color:var(--orange)">Frutos por Planta</label>
+                        <div id="individualPlantsContainer" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px"></div>
+                        <div style="background:var(--orange-bg);border:1px solid #f0b070;color:var(--orange);padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;display:flex;justify-content:space-between">
+                            <span>TOTAL COLHIDO</span>
+                            <span id="totalHarvestCalc">0</span>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="space-y-1">
-                        <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase">Data</label>
-                        <input type="date" id="startDate" class="input-field">
+            </div>
+
+            <div id="plantList"></div>
+
+            <details style="margin-top:20px">
+                <summary class="archive-summary">Arquivo <span id="archiveCount">(0)</span></summary>
+                <div id="archiveList" style="margin-top:8px"></div>
+            </details>
+
+        </div>
+
+        <!-- TAB: TABULEIROS -->
+        <div id="panel-tray" style="display:none" class="fade-in">
+
+            <div style="display:flex;gap:16px;align-items:flex-start" class="tray-layout">
+
+                <!-- SEED SIDEBAR -->
+                <div style="width:200px;flex-shrink:0" class="tray-sidebar">
+                    <button class="btn-primary" style="width:100%;padding:10px 18px;font-size:12px;margin-bottom:12px" onclick="openNewTrayModal()">+ Novo Tabuleiro</button>
+                    <div class="card" style="padding:16px;margin-bottom:12px">
+                        <div class="section-label">Biblioteca</div>
+                        <div id="tray-seed-library" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding-right:2px"></div>
                     </div>
-                    <div class="space-y-1">
-                        <label class="text-[10px] font-bold text-slate-500 ml-1 uppercase">Etapa</label>
-                        <select id="stage" class="input-field" onchange="updateQtyLabel()">
-                            <option value="Germinação">Germinação</option>
-                            <option value="Plantação">Plantação</option>
-                            <option value="Colheita">Colheita</option>
-                        </select>
+                    <div class="card" style="padding:16px">
+                        <div class="section-label">Nova Semente</div>
+                        <div class="space-y">
+                            <input type="text" id="tSeedName" placeholder="Nome... (ex: Tomate Cherry)" style="font-size:13px">
+                            <div>
+                                <div class="field-label" style="margin-bottom:5px">Ícone</div>
+                                <div class="emoji-grid" id="tEmojiGrid"></div>
+                            </div>
+                            <div>
+                                <div class="field-label" style="margin-bottom:5px">Cor</div>
+                                <div style="display:flex;gap:5px;flex-wrap:wrap" id="tColorRow"></div>
+                            </div>
+                            <button class="btn-primary" style="font-size:12px;padding:10px" onclick="tAddSeed()">+ Adicionar</button>
+                        </div>
                     </div>
                 </div>
 
-                <div id="harvestInputContainer" class="hidden pt-2 border-t border-dashed mt-2">
-                    <label class="text-[10px] font-bold text-orange-500 ml-1 uppercase mb-2 block">Frutos por Planta</label>
-                    <div id="individualPlantsContainer" class="grid grid-cols-4 gap-2 mb-3"></div>
-                    <div class="bg-orange-50 text-orange-700 px-3 py-2 rounded-lg text-[10px] flex justify-between items-center font-bold border border-orange-100">
-                        <span>TOTAL COLHIDO:</span>
-                        <span id="totalHarvestCalc" class="text-sm">0</span>
+                <!-- TRAYS -->
+                <div style="flex:1;min-width:0" class="tray-main">
+                    <div id="tTraysContainer">
+                        <div class="no-trays">
+                            <div style="font-size:48px;margin-bottom:12px">🌿</div>
+                            <div style="font-family:'Lora',serif;font-size:18px;font-weight:600;margin-bottom:8px">Sem tabuleiros</div>
+                            <div style="font-size:13px;color:var(--text-faint)">Cria um tabuleiro para começar</div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="flex gap-3 pt-2">
-                    <button id="mainBtn" onclick="handleAction()" class="btn-primary shadow-sm">Gravar Lote</button>
-                    <button id="cancelBtn" onclick="resetForm()" class="hidden btn-cancel px-4">✕</button>
-                </div>
             </div>
         </div>
 
-        <div id="plantList" class="space-y-4"></div>
+    </div><!-- /app-wrap -->
+</div><!-- /appContent -->
 
-        <details class="mt-12 group">
-            <summary class="text-center list-none cursor-pointer text-[10px] font-bold uppercase tracking-widest text-slate-400 py-4">
-                Arquivo Histórico <span id="archiveCount">(0)</span>
-            </summary>
-            <div id="archiveList" class="mt-2 space-y-4"></div>
-        </details>
+<!-- MODAL: Cell detail -->
+<div class="modal-overlay" id="cellModal">
+    <div class="modal-box">
+        <div class="modal-title" id="cellModalTitle">Detalhes do Vaso</div>
+        <div class="space-y">
+            <div>
+                <label class="field-label">Semente</label>
+                <select id="cellSeedSelect"></select>
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Data</label>
+                    <input type="date" id="cellDate">
+                </div>
+                <div>
+                    <label class="field-label">Qtd.</label>
+                    <input type="number" id="cellQty" value="1" min="1">
+                </div>
+            </div>
+            <div>
+                <label class="field-label">Notas</label>
+                <textarea id="cellNotes" rows="2" placeholder="Observações..." style="height:auto;resize:none;font-size:13px;padding: 5px 10px;"></textarea>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn-ghost" onclick="closeCellModal()">Cancelar</button>
+                <button class="btn-ghost" id="clearCellBtn" onclick="clearCell()" style="display:none;color:var(--red);border-color:var(--red)">Limpar</button>
+                <button class="btn-primary" onclick="saveCellModal()">Guardar</button>
+            </div>
+        </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="script.js"></script>
+<!-- MODAL: New tray -->
+<div class="modal-overlay" id="newTrayModal">
+    <div class="modal-box">
+        <div class="modal-title">Novo Tabuleiro</div>
+        <div class="space-y">
+            <div>
+                <label class="field-label">Nome</label>
+                <input type="text" id="newTrayName" placeholder="Ex: Primavera 2025" onkeydown="if(event.key==='Enter')createTray()">
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Colunas</label>
+                    <input type="number" id="newTrayCols" value="4" min="1" max="20">
+                </div>
+                <div>
+                    <label class="field-label">Linhas</label>
+                    <input type="number" id="newTrayRows" value="4" min="1" max="20">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn-ghost"   onclick="closeNewTrayModal()">Cancelar</button>
+                <button class="btn-primary" onclick="createTray()">Criar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Drag ghost -->
+<div class="drag-ghost" id="dragGhost">
+    <span id="dragGhostEmoji"></span>
+    <span id="dragGhostName" style="font-size:12px;color:var(--text)"></span>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+
 </body>
 </html>

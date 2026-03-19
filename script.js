@@ -1,61 +1,124 @@
 /**
- * PEPPER TRACKER PRO - CÓDIGO TOTAL INTEGRADO
- * Funcionalidades: Sincronização em cascata, Validação retroativa, Grelha de Colheita e Edição In-Card.
+ * GARDEN TRACKER — SCRIPT COMPLETO
+ * Pepper Tracker (Supabase) + Tabuleiros (Supabase) + Dark Mode
  */
+
+// ════════════════════════════════════════════════════════
+// SUPABASE
+// ════════════════════════════════════════════════════════
 
 const SUPABASE_URL = 'https://bjvjojpjhyujhyatrxlz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_dvUvVnNBD2yKxKS_Y30b2w_KDozTYOE';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Catálogo partilhado entre o Pepper Tracker e os Tabuleiros
 const CATALOGO = [
-    { nome: "Tomate", img: "imagens/tomate.webp" },
-    { nome: "Pimento Vermelho", img: "imagens/pimento_vermelho.webp" },
-    { nome: "Pimento Laranja", img: "imagens/pimento_laranja.webp" },
-    { nome: "Pimento Amarelo", img: "imagens/pimento_amarelo.webp" },
-    { nome: "Pimento Verde", img: "imagens/pimento_verde.webp" },
-    { nome: "Jalapeño", img: "imagens/jalapeno.webp" },
-    { nome: "Habanero Vermelho", img: "imagens/habanero_vermelho.webp" },
-    { nome: "Carolina Reaper", img: "imagens/carolina_reaper.webp" }
+    { nome: "Tomate",                img: "imagens/tomate.webp" },
+    { nome: "Tomate Cherry",         img: "imagens/tomate.webp" },
+    { nome: "Tomate Coração de Boi", img: "imagens/tomate.webp" },
+    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp" },
+    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp" },
+    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp" },
+    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp" },
+    { nome: "Jalapeño",              img: "imagens/jalapeno.webp" },
+    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp" },
+    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp" },
+    { nome: "Ghost Pepper",          img: "imagens/default.webp" },
+    { nome: "Serrano",               img: "imagens/default.webp" },
 ];
 
 const IMG_DEFAULT = "imagens/default.webp";
+
+// Devolve a imagem do catálogo para um nome de semente
+function getImgForSeed(name) {
+    if (!name) return IMG_DEFAULT;
+    const match = CATALOGO.find(c => c.nome.toLowerCase() === name.toLowerCase());
+    return match ? match.img : IMG_DEFAULT;
+}
+
 let plants = [];
 let isSignUpMode = false;
+let currentUserId = null;
 
-// --- GESTÃO DE SESSÃO ---
+// ════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════
+
 _supabase.auth.onAuthStateChange((event, session) => {
-    const overlay = document.getElementById('authOverlay');
-    const content = document.getElementById('appContent');
     if (session) {
-        overlay.classList.add('hidden');
-        content.classList.remove('hidden');
+        currentUserId = session.user.id;
+        document.getElementById('authOverlay').classList.add('hidden');
+        document.getElementById('appContent').style.display = '';
         document.getElementById('userEmailLabel').innerText = session.user.email;
         loadCatalog();
         loadFromSupabase();
         document.getElementById('startDate').valueAsDate = new Date();
+        tInit();
     } else {
-        overlay.classList.remove('hidden');
-        content.classList.add('hidden');
+        currentUserId = null;
+        document.getElementById('authOverlay').classList.remove('hidden');
+        document.getElementById('appContent').style.display = 'none';
     }
 });
 
 async function handleAuth() {
-    const email = document.getElementById('authEmail').value;
+    const email    = document.getElementById('authEmail').value;
     const password = document.getElementById('authPassword').value;
     if (!email || !password) return alert("Preenche os dados!");
-    const { error } = isSignUpMode ? await _supabase.auth.signUp({ email, password }) : await _supabase.auth.signInWithPassword({ email, password });
+    const { error } = isSignUpMode
+        ? await _supabase.auth.signUp({ email, password })
+        : await _supabase.auth.signInWithPassword({ email, password });
     if (error) alert(error.message);
 }
 
 function toggleAuthMode() {
     isSignUpMode = !isSignUpMode;
-    document.getElementById('authTitle').innerText = isSignUpMode ? 'Criar Conta' : 'Entrar';
-    document.getElementById('authPrimaryBtn').innerText = isSignUpMode ? 'Registar agora' : 'Entrar';
+    document.getElementById('authSubtitle').innerText = isSignUpMode ? 'Criar uma conta nova' : 'Bem-vindo de volta';
+    document.getElementById('authPrimaryBtn').innerText = isSignUpMode ? 'Registar' : 'Entrar';
+    document.getElementById('authSecondaryBtn').innerHTML = isSignUpMode
+        ? 'Já tens conta? <span style="color:var(--green)">Entrar</span>'
+        : 'Não tens conta? <span style="color:var(--green)">Criar registo</span>';
 }
 
 async function handleLogout() { await _supabase.auth.signOut(); }
 
-// --- CORE LOGIC ---
+// ════════════════════════════════════════════════════════
+// DARK MODE
+// ════════════════════════════════════════════════════════
+
+function toggleDark() {
+    const html   = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('darkToggleBtn').textContent = isDark ? '🌙' : '☀️';
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+}
+
+(function initTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('darkToggleBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+        });
+    }
+})();
+
+// ════════════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════════════
+
+function switchTab(tab) {
+    ['tracker', 'tray'].forEach(t => {
+        document.getElementById(`panel-${t}`).style.display = t === tab ? '' : 'none';
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'tray') { tRenderSeeds(); tRenderTrays(); }
+}
+
+// ════════════════════════════════════════════════════════
+// PEPPER TRACKER — CORE
+// ════════════════════════════════════════════════════════
 
 async function loadFromSupabase() {
     const { data, error } = await _supabase.from('plants').select('*').order('id', { ascending: false });
@@ -63,262 +126,227 @@ async function loadFromSupabase() {
 }
 
 function loadCatalog() {
-    const datalist = document.getElementById('pepperCatalog');
-    if(!datalist) return;
-    datalist.innerHTML = ""; 
-    CATALOGO.forEach(item => {
-        let option = document.createElement('option');
-        option.value = item.nome;
-        datalist.appendChild(option);
-    });
+    const dl = document.getElementById('pepperCatalog');
+    if (!dl) return;
+    dl.innerHTML = CATALOGO.map(c => `<option value="${c.nome}">`).join('');
 }
 
 function updateQtyLabel() {
     const stage = document.getElementById('stage').value;
     const label = document.getElementById('labelQty');
-    const harvestContainer = document.getElementById('harvestInputContainer');
-    if (stage === "Germinação") { label.innerText = "Sementes"; harvestContainer.classList.add('hidden'); } 
-    else if (stage === "Plantação") { label.innerText = "Nº de Plantas"; harvestContainer.classList.add('hidden'); } 
-    else if (stage === "Colheita") {
-        label.innerText = "Plantas Vivas";
-        harvestContainer.classList.remove('hidden');
-        renderHarvestInputs('quantity', 'individualPlantsContainer', 'plant-harvest-input');
+    const hc    = document.getElementById('harvestInputContainer');
+    if (stage === 'Germinação') {
+        label.innerText = 'Sementes';
+        hc.style.display = 'none';
+    } else if (stage === 'Plantação') {
+        label.innerText = 'Nº Plantas';
+        hc.style.display = 'none';
+    } else {
+        label.innerText = 'Plantas Vivas';
+        hc.style.display = '';
+        renderHarvestInputs('quantity', 'individualPlantsContainer', 'harvest-plant-input');
     }
 }
 
-function renderHarvestInputs(qtyInputId, containerId, inputClass) {
-    const num = parseInt(document.getElementById(qtyInputId).value) || 0;
+function renderHarvestInputs(qtyId, containerId, cls) {
+    const num       = parseInt(document.getElementById(qtyId).value) || 0;
     const container = document.getElementById(containerId);
-    if(!container) return;
-    container.innerHTML = "";
+    if (!container) return;
+    container.innerHTML = '';
     for (let i = 1; i <= num; i++) {
         container.innerHTML += `
             <div>
-                <label class="text-[10px] text-slate-400 block ml-1 uppercase">P${i}</label>
-                <input type="number" class="${inputClass} input-field text-center !p-1 !h-10 border-orange-200" data-index="${i}" placeholder="0" oninput="calculateTotalHarvest()">
+                <label style="font-size:9px;color:var(--text-faint);display:block;text-align:center;margin-bottom:2px">P${i}</label>
+                <input type="number" class="${cls}" data-index="${i}" placeholder="0"
+                    oninput="calculateTotalHarvest()"
+                    style="font-size:12px;padding:6px;height:36px">
             </div>`;
     }
 }
 
 function calculateTotalHarvest() {
-    const inputs = document.querySelectorAll('.plant-harvest-input, .incard-harvest-input');
+    const inputs = document.querySelectorAll('.harvest-plant-input, .incard-harvest-input');
     let total = 0;
-    inputs.forEach(input => total += parseInt(input.value) || 0);
-    const displays = document.querySelectorAll('[id^="total-harvest-display-"], #totalHarvestCalc');
-    displays.forEach(d => d.innerText = total);
+    inputs.forEach(i => total += parseInt(i.value) || 0);
+    document.querySelectorAll('[id^="total-harvest-display-"], #totalHarvestCalc')
+            .forEach(d => d.innerText = total);
 }
 
-// --- FORMULÁRIOS IN-CARD (EDIÇÃO E AVANÇO) ---
+// ── IN-CARD FORMS (ADVANCE + EDIT) ────────────────────
 
 function openInCardForm(id, type, historyId = null) {
-    const p = plants.find(x => x.id == id);
+    const p    = plants.find(x => x.id == id);
     const area = document.getElementById(`in-card-area-${id}`);
     area.classList.remove('hidden');
-    
-    let title = "";
-    let defaultQty = p.quantity;
+
+    let title = '', defaultQty = p.quantity;
     let defaultDate = new Date().toISOString().split('T')[0];
-    let action = "";
-    let isHarvest = false;
-    let minDateStr = "";
+    let action = '', isHarvest = false, minDateStr = '';
 
     if (type === 'next') {
-        const nextStage = p.stage === "Germinação" ? "Plantação" : "Colheita";
-        isHarvest = nextStage === "Colheita";
-        title = `Avançar para: ${nextStage}`;
-        action = `submitNextStage(${id}, '${nextStage}')`;
-        minDateStr = p.lastUpdated; 
+        const nextStage = p.stage === 'Germinação' ? 'Plantação' : 'Colheita';
+        isHarvest   = nextStage === 'Colheita';
+        title       = `Avançar → ${nextStage}`;
+        action      = `submitNextStage(${id}, '${nextStage}')`;
+        minDateStr  = p.lastUpdated;
     } else {
-        const hItem = p.history.find(h => h.id === historyId);
+        const hItem  = p.history.find(h => h.id === historyId);
         const hIndex = p.history.findIndex(h => h.id === historyId);
-        
-        // Verifica se o item que estamos a EDITAR é uma colheita
-        isHarvest = hItem.text.includes("Colheita");
-        
-        title = `Corrigir Etapa`;
-        defaultQty = parseInt(hItem.text.match(/\d+/) || p.quantity);
-        defaultDate = hItem.date;
-        action = `submitHistoryEdit(${id}, ${historyId})`;
-
-        if (hIndex > 0) {
-            minDateStr = p.history[hIndex - 1].date;
-        }
+        isHarvest    = hItem.text.includes('Colheita');
+        title        = 'Corrigir Etapa';
+        defaultQty   = parseInt(hItem.text.match(/\d+/) || p.quantity);
+        defaultDate  = hItem.date;
+        action       = `submitHistoryEdit(${id}, ${historyId})`;
+        if (hIndex > 0) minDateStr = p.history[hIndex - 1].date;
     }
 
     area.innerHTML = `
-        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-            <p class="text-[9px] font-black text-slate-500 uppercase">${title}</p>
-            <div class="grid grid-cols-2 gap-2">
+        <div class="incard-form">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);margin-bottom:12px">${title}</div>
+            <div class="form-grid-2" style="margin-bottom:10px">
                 <div class="${isHarvest ? 'hidden' : ''}">
-                    <label class="text-[8px] font-bold text-slate-400 uppercase">Quantidade</label>
-                    <input type="number" id="incard-qty-${id}" value="${defaultQty}" class="input-field !h-10 text-sm">
+                    <label class="field-label">Quantidade</label>
+                    <input type="number" id="incard-qty-${id}" value="${defaultQty}" style="height:40px;font-size:13px">
                 </div>
-                <div class="${isHarvest ? 'col-span-2' : ''}">
-                    <label class="text-[8px] font-bold text-slate-400 uppercase">Data</label>
-                    <input type="date" id="incard-date-${id}" value="${defaultDate}" 
-                           ${minDateStr ? `min="${minDateStr}"` : ''} 
-                           class="input-field !h-10 text-sm">
-                </div>
-            </div>
-            
-            <div id="incard-harvest-area-${id}" class="${isHarvest ? '' : 'hidden'} space-y-2">
-                <label class="text-[8px] font-bold text-orange-500 uppercase">Frutos por planta:</label>
-                <div id="incard-harvest-grid-${id}" class="grid grid-cols-4 gap-1"></div>
-                <div class="text-[9px] font-bold text-orange-700 bg-orange-50 p-2 rounded border border-orange-100 flex justify-between">
-                    <span>TOTAL:</span> <span id="total-harvest-display-${id}">0</span>
+                <div>
+                    <label class="field-label">Data</label>
+                    <input type="date" id="incard-date-${id}" value="${defaultDate}"
+                        ${minDateStr ? `min="${minDateStr}"` : ''}
+                        style="height:40px;font-size:13px">
                 </div>
             </div>
+            <div id="incard-harvest-area-${id}" class="${isHarvest ? '' : 'hidden'}" style="margin-bottom:10px">
+                <label class="field-label" style="color:var(--orange)">Frutos por planta</label>
+                <div id="incard-harvest-grid-${id}" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0"></div>
+                <div style="font-size:10px;font-weight:700;background:var(--orange-bg);color:var(--orange);padding:8px 12px;border-radius:8px;display:flex;justify-content:space-between;border:1px solid #f0b070">
+                    <span>TOTAL</span><span id="total-harvest-display-${id}">0</span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button onclick="${action}" class="btn-primary" style="padding:10px;font-size:12px">Confirmar</button>
+                <button onclick="document.getElementById('in-card-area-${id}').classList.add('hidden')"
+                    class="btn-ghost" style="font-size:12px;padding:10px">Cancelar</button>
+            </div>
+        </div>`;
 
-            <div class="flex gap-2">
-                <button onclick="${action}" class="btn-primary !py-2 !text-[10px]">Confirmar</button>
-                <button onclick="document.getElementById('in-card-area-${id}').classList.add('hidden')" class="btn-cancel px-3 !text-[10px]">Cancelar</button>
-            </div>
-        </div>
-    `;
-
-    // Se for colheita, gera os inputs baseando-se na etapa anterior (Plantação)
     if (isHarvest) {
         const grid = document.getElementById(`incard-harvest-grid-${id}`);
-        grid.innerHTML = "";
-        
-        // Procuramos a quantidade de plantas na etapa anterior à colheita
+        grid.innerHTML = '';
         let plantasVivas = p.quantity;
         if (type === 'edit') {
             const hIndex = p.history.findIndex(h => h.id === historyId);
             if (hIndex > 0) {
-                const prevText = p.history[hIndex-1].text;
-                plantasVivas = parseInt(prevText.match(/(\d+)\//)?.[1] || prevText.match(/\d+/)[0]);
+                const prevText = p.history[hIndex - 1].text;
+                plantasVivas = parseInt(prevText.match(/(\d+)\//)?.[1] || prevText.match(/\d+/)?.[0] || plantasVivas);
             }
         }
-
-        for(let i=1; i <= plantasVivas; i++) {
-            grid.innerHTML += `<input type="number" class="incard-harvest-input input-field !p-1 !h-8 text-center text-xs border-orange-200" placeholder="P${i}" oninput="calculateTotalHarvest()">`;
+        for (let i = 1; i <= plantasVivas; i++) {
+            grid.innerHTML += `
+                <input type="number" class="incard-harvest-input" placeholder="P${i}"
+                    oninput="calculateTotalHarvest()"
+                    style="background:var(--orange-bg);border:1px solid #f0b070;border-radius:8px;
+                           padding:4px;height:34px;text-align:center;font-size:12px;width:100%">`;
         }
     }
 }
 
 async function submitNextStage(id, nextStage) {
-    const p = plants.find(x => x.id == id);
+    const p    = plants.find(x => x.id == id);
     const date = document.getElementById(`incard-date-${id}`).value;
-    const qty = nextStage === "Colheita" ? p.quantity : (parseInt(document.getElementById(`incard-qty-${id}`).value) || 0);
-    
-    // Validação de Data: Não pode ser igual ou anterior à última etapa
-    if (new Date(date) <= new Date(p.lastUpdated)) {
-        return alert(`⚠️ A data da nova etapa (${date}) tem de ser posterior à etapa anterior (${p.lastUpdated})!`);
-    }
+    const qty  = nextStage === 'Colheita'
+        ? p.quantity
+        : (parseInt(document.getElementById(`incard-qty-${id}`).value) || 0);
 
-    if(nextStage === "Plantação" && qty > p.quantity) {
-        return alert(`⚠️ Erro: Não podes plantar mais do que germinou!`);
-    }
+    if (new Date(date) <= new Date(p.lastUpdated))
+        return alert(`⚠️ A data (${date}) tem de ser posterior à etapa anterior (${p.lastUpdated})!`);
+    if (nextStage === 'Plantação' && qty > p.quantity)
+        return alert(`⚠️ Não podes plantar mais do que germinou!`);
 
     let history = [...p.history];
-    const days = calculateDays(p.startDate, date);
-    let info = "";
+    const days  = calculateDays(p.startDate, date);
+    let info    = '';
 
-    if(nextStage === "Plantação") {
-        info = `🌿 Plantação: ${qty}/${p.quantity} plantas. Taxa: ${Math.round((qty/p.quantity)*100)}% (Dia ${days}).`;
+    if (nextStage === 'Plantação') {
+        info = `🌿 Plantação: ${qty}/${p.quantity} plantas. Taxa: ${Math.round((qty / p.quantity) * 100)}% (Dia ${days}).`;
     } else {
-        let total = 0;
-        let rows = "";
-        const inputs = document.querySelectorAll('.incard-harvest-input');
-        inputs.forEach((input, i) => {
+        let total = 0, rows = '';
+        document.querySelectorAll('.incard-harvest-input').forEach((input, i) => {
             const val = parseInt(input.value) || 0;
             total += val;
-            rows += `<tr><td class="border px-2 py-1">P${i+1}</td><td class="border px-2 py-1 text-center font-bold text-orange-600">${val}</td></tr>`;
+            rows  += `<tr><td class="border px-2 py-1">P${i + 1}</td><td class="border px-2 py-1 text-center font-bold" style="color:var(--orange)">${val}</td></tr>`;
         });
-        info = `<div class="mb-1 text-orange-600 font-bold">🍎 Colheita: Total ${total} frutos (Dia ${days})</div><table class="w-full text-[10px] border border-orange-100 bg-orange-50/30"><tbody>${rows}</tbody></table>`;
+        info = `<div style="font-weight:700;color:var(--orange);margin-bottom:4px">🍎 Colheita: Total ${total} frutos (Dia ${days})</div><table class="harvest-table"><tbody>${rows}</tbody></table>`;
     }
 
-    history.push({ id: Date.now(), text: info, date: date });
-    await _supabase.from('plants').update({ stage: nextStage, quantity: qty, lastUpdated: date, history: history }).eq('id', id);
+    history.push({ id: Date.now(), text: info, date });
+    await _supabase.from('plants').update({ stage: nextStage, quantity: qty, lastUpdated: date, history }).eq('id', id);
     loadFromSupabase();
 }
 
 async function submitHistoryEdit(pId, hId) {
-    const p = plants.find(x => x.id == pId);
+    const p      = plants.find(x => x.id == pId);
     const newQty = parseInt(document.getElementById(`incard-qty-${pId}`).value) || 0;
     const newDate = document.getElementById(`incard-date-${pId}`).value;
-    
+
     let history = [...p.history];
     const index = history.findIndex(h => h.id === hId);
 
-    // 1. Atualiza a etapa que estás a editar no momento
-    if (history[index].text.includes("Colheita")) {
-        // Lógica de Colheita (Tabela)
-        let total = 0;
-        let rows = "";
-        const inputs = document.querySelectorAll('.incard-harvest-input');
+    if (history[index].text.includes('Colheita')) {
+        let total = 0, rows = '';
         const days = calculateDays(p.startDate, newDate);
-        inputs.forEach((input, i) => {
+        document.querySelectorAll('.incard-harvest-input').forEach((input, i) => {
             const val = parseInt(input.value) || 0;
             total += val;
-            rows += `<tr><td class="border px-2 py-1">P${i+1}</td><td class="border px-2 py-1 text-center font-bold text-orange-600">${val}</td></tr>`;
+            rows  += `<tr><td class="border px-2 py-1">P${i + 1}</td><td class="border px-2 py-1 text-center font-bold" style="color:var(--orange)">${val}</td></tr>`;
         });
-        history[index].text = `<div class="mb-1 text-orange-600 font-bold">🍎 Colheita: Total ${total} frutos (Dia ${days})</div><table class="w-full text-[8px] border border-orange-100 bg-orange-50/30"><tbody>${rows}</tbody></table>`;
+        history[index].text = `<div style="font-weight:700;color:var(--orange);margin-bottom:4px">🍎 Colheita: Total ${total} frutos (Dia ${days})</div><table class="harvest-table"><tbody>${rows}</tbody></table>`;
     } else if (index === 0) {
-        // Se editou Germinação, atualiza o texto base
         history[index].text = `🌱 Germinação: ${newQty} sementes iniciadas.`;
     } else {
-        // Se editou Plantação diretamente
         const germQty = parseInt(history[0].text.match(/\d+/) || 0);
-        const taxa = germQty > 0 ? Math.round((newQty / germQty) * 100) : 0;
-        const days = calculateDays(p.startDate, newDate);
+        const taxa    = germQty > 0 ? Math.round((newQty / germQty) * 100) : 0;
+        const days    = calculateDays(p.startDate, newDate);
         history[index].text = `🌿 Plantação: ${newQty}/${germQty} plantas. Taxa: ${taxa}% (Dia ${days}).`;
     }
 
     history[index].date = newDate;
 
-    // 2. SINCRONIZAÇÃO EM CASCATA: Se mudaste sementes, atualiza a taxa da plantação abaixo
     if (index === 0 && history.length > 1) {
-        const plantacaoItem = history[1];
-        // Extrai quantas plantas vivas já existiam no texto da plantação
-        const plantasVivasMatch = plantacaoItem.text.match(/Plantação: (\d+)\//);
-        let plantasVivas = plantasVivasMatch ? parseInt(plantasVivasMatch[1]) : 0;
-        
-        // Impede que o número de plantas seja maior que o novo número de sementes
+        const plantacaoItem  = history[1];
+        const match          = plantacaoItem.text.match(/Plantação: (\d+)\//);
+        let   plantasVivas   = match ? parseInt(match[1]) : 0;
         if (plantasVivas > newQty) plantasVivas = newQty;
-        
         const novaTaxa = newQty > 0 ? Math.round((plantasVivas / newQty) * 100) : 0;
-        const diasPlantação = calculateDays(p.startDate, plantacaoItem.date);
-        
-        // RECONSTRÓI a string para garantir que a percentagem atualiza
-        history[1].text = `🌿 Plantação: ${plantasVivas}/${newQty} plantas. Taxa: ${novaTaxa}% (Dia ${diasPlantação}).`;
+        const dias     = calculateDays(p.startDate, plantacaoItem.date);
+        history[1].text = `🌿 Plantação: ${plantasVivas}/${newQty} plantas. Taxa: ${novaTaxa}% (Dia ${dias}).`;
     }
 
-    // 3. Atualizar o Card Principal e o Supabase
-    const isLatest = index === history.length - 1;
-    const updateData = { history: history };
-    if (isLatest) {
-        updateData.quantity = newQty;
-        updateData.lastUpdated = newDate;
-    }
+    const isLatest   = index === history.length - 1;
+    const updateData = { history };
+    if (isLatest) { updateData.quantity = newQty; updateData.lastUpdated = newDate; }
 
     const { error } = await _supabase.from('plants').update(updateData).eq('id', pId);
-    if (error) alert("Erro: " + error.message);
-    
+    if (error) alert('Erro: ' + error.message);
     loadFromSupabase();
 }
 
-// --- CRUD BASE ---
+// ── CRUD ──────────────────────────────────────────────
 
 async function handleAction() {
-    const variety = document.getElementById('variety').value;
-    const qty = parseInt(document.getElementById('quantity').value) || 0;
-    const date = document.getElementById('startDate').value;
-    const stage = document.getElementById('stage').value;
+    const variety = document.getElementById('variety').value.trim();
+    const qty     = parseInt(document.getElementById('quantity').value) || 0;
+    const date    = document.getElementById('startDate').value;
+    const stage   = document.getElementById('stage').value;
+    if (!variety) return alert('Indica a variedade!');
 
-    if (!variety) return alert("Indique a variedade!");
-    const match = CATALOGO.find(p => p.nome.toLowerCase() === variety.toLowerCase());
-
+    const match   = CATALOGO.find(p => p.nome.toLowerCase() === variety.toLowerCase());
     const payload = {
-        variety: variety,
-        quantity: qty,
-        stage: stage,
-        imgUrl: match ? match.img : IMG_DEFAULT,
-        startDate: date,
+        variety, quantity: qty, stage,
+        imgUrl:      match ? match.img : IMG_DEFAULT,
+        startDate:   date,
         lastUpdated: date,
-        archived: false,
-        history: [{ id: Date.now(), text: `🌱 Germinação: ${qty} sementes iniciadas.`, date: date }]
+        archived:    false,
+        history: [{ id: Date.now(), text: `🌱 Germinação: ${qty} sementes iniciadas.`, date }]
     };
 
     await _supabase.from('plants').insert([payload]);
@@ -327,79 +355,582 @@ async function handleAction() {
 }
 
 function render() {
-    const list = document.getElementById('plantList');
+    const list    = document.getElementById('plantList');
     const archive = document.getElementById('archiveList');
-    list.innerHTML = ""; archive.innerHTML = "";
+    list.innerHTML = ''; archive.innerHTML = '';
 
     plants.forEach(p => {
-        const days = calculateDays(p.startDate, new Date());
+        const days       = calculateDays(p.startDate, new Date());
+        const stageColor = p.stage === 'Colheita' ? 'badge-orange' : 'badge-green';
+
         const historyHTML = p.history.map(h => `
-            <div class="timeline-item flex flex-col gap-1 !border-l-2 ">
-                <div class="flex justify-between items-center opacity-60">
-                    <span class="font-bold text-[10px] uppercase">${h.date}</span>
-                    <div class="flex gap-2">
-                        <span onclick="openInCardForm(${p.id}, 'edit', ${h.id})" class="btn-hist-edit cursor-pointer text-[10px] font-black uppercase">Editar</span>
-                        <span onclick="deleteHistory(${p.id}, ${h.id})" class="btn-hist-del cursor-pointer text-[10px] font-black uppercase">Apagar</span>
+            <div class="timeline-item">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;opacity:0.65">
+                    <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:300">${h.date}</span>
+                    <div style="display:flex;gap:10px">
+                        <span onclick="openInCardForm(${p.id}, 'edit', ${h.id})"
+                            style="cursor:pointer;font-size:10px;font-weight:700;color:#26c800">Editar</span>
+                        <span onclick="deleteHistory(${p.id}, ${h.id})"
+                            style="cursor:pointer;font-size:10px;font-weight:700;color:var(--red)">Apagar</span>
                     </div>
                 </div>
-                <div class="text-[11px] text-slate-700">${h.text}</div>
+                <div class="timeline-text">${h.text}</div>
             </div>`).join('');
 
         const card = `
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-4 ${p.archived ? 'grayscale' : ''}">
-                <div class="flex justify-between items-center mb-3 opacity-40 border-b pb-2 text-[10px] font-bold">
-                    <span>📅 ${p.startDate}</span>
-                    <span class="bg-slate-100 px-2 py-1 rounded">${days} DIAS</span>
-                </div>
-                <div class="flex gap-4 items-center">
-                    <div class="img-frame"><img src="${p.imgUrl}" class="plant-thumb" onerror="this.src='${IMG_DEFAULT}'"></div>
-                    <div class="flex-1">
-                        <h3 class="font-bold text-slate-800">${p.variety}</h3>
-                        <p class="text-[10px] text-slate-400 font-bold uppercase mt-1">${p.quantity} Unid. | ${p.stage}</p>
+            <div class="plant-card ${p.archived ? 'archived' : ''} fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint)">📅 ${p.startDate}</span>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <span class="badge ${stageColor}">${p.stage}</span>
+                        <span class="badge badge-muted">${days}d</span>
                     </div>
-                    ${p.stage !== 'Colheita' && !p.archived ? `<button onclick="openInCardForm(${p.id}, 'next')" class="bg-emerald-500 text-white text-[10px] font-black px-3 py-2 rounded-lg uppercase shadow-sm">Próxima Etapa</button>` : ''}
                 </div>
-                <div id="in-card-area-${p.id}" class="hidden mt-4 pt-4 border-t border-dashed animate-in fade-in duration-300"></div>
-                <div class="mt-4 space-y-2 border-t pt-4">${historyHTML}</div>
-                <div class="mt-4 flex justify-between items-center border-t pt-3">
-                    <button onclick="deletePlant(${p.id})" class="text-[10px] font-bold text-slate-300 hover:text-red-400 uppercase">Eliminar</button>
-                    <button onclick="toggleArchive(${p.id})" class="text-[10px] font-bold text-slate-400 uppercase">${p.archived ? '📤 Restaurar' : '📥 Arquivar'}</button>
+                <div style="display:flex;gap:14px;align-items:center;margin-bottom:14px">
+                    <div class="plant-img-wrap">
+                        <img src="${p.imgUrl}" onerror="this.src='${IMG_DEFAULT}'">
+                    </div>
+                    <div style="flex:1">
+                        <div style="font-family:'Lora',serif;font-size:16px;font-weight:700">${p.variety}</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-weight:600">${p.quantity} unid.</div>
+                    </div>
+                    ${p.stage !== 'Colheita' && !p.archived
+                        ? `<button onclick="openInCardForm(${p.id}, 'next')" class="btn-primary"
+                               style="flex:0;padding:9px 14px;font-size:11px;white-space:nowrap">Próxima →</button>`
+                        : ''}
+                </div>
+                <div id="in-card-area-${p.id}" class="hidden"></div>
+                <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">${historyHTML}</div>
+                <div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+                    <button onclick="deletePlant(${p.id})"
+                        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-faint)"
+                        onmouseover="this.style.color='var(--red)'"
+                        onmouseout="this.style.color='var(--text-faint)'">Eliminar</button>
+                    <button onclick="toggleArchive(${p.id})"
+                        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-muted)">
+                        ${p.archived ? '📤 Restaurar' : '📥 Arquivar'}</button>
                 </div>
             </div>`;
 
         p.archived ? archive.innerHTML += card : list.innerHTML += card;
     });
-    document.getElementById('archiveCount').innerText = `(${archive.childElementCount})`;
+
+    document.getElementById('archiveCount').innerText =
+        `(${document.getElementById('archiveList').childElementCount})`;
 }
 
-// --- AUXILIARES ---
-
 function resetForm() {
-    document.getElementById('variety').value = "";
-    document.getElementById('quantity').value = "1";
+    document.getElementById('variety').value  = '';
+    document.getElementById('quantity').value = '1';
     document.getElementById('startDate').valueAsDate = new Date();
-    document.getElementById('stage').value = "Germinação";
+    document.getElementById('stage').value    = 'Germinação';
+    document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('formTitle').innerText     = 'Novo Registo';
     updateQtyLabel();
 }
 
 function calculateDays(s, e) {
-    const start = new Date(s); const end = new Date(e);
-    start.setHours(0,0,0,0); end.setHours(0,0,0,0);
-    return Math.max(0, Math.floor((end - start) / (1000 * 60 * 60 * 24)));
+    const start = new Date(s), end = new Date(e);
+    start.setHours(0, 0, 0, 0); end.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((end - start) / 86400000));
 }
 
 async function deleteHistory(pId, hId) {
-    if(!confirm("Apagar registo?")) return;
+    if (!confirm('Apagar registo?')) return;
     const p = plants.find(x => x.id == pId);
-    const newHistory = p.history.filter(h => h.id !== hId);
-    await _supabase.from('plants').update({ history: newHistory }).eq('id', pId);
+    await _supabase.from('plants').update({ history: p.history.filter(h => h.id !== hId) }).eq('id', pId);
     loadFromSupabase();
 }
 
-async function deletePlant(id) { if(confirm("Apagar permanentemente?")) { await _supabase.from('plants').delete().eq('id', id); loadFromSupabase(); } }
-
-async function toggleArchive(id) { 
-    const p = plants.find(x => x.id == id);
-    await _supabase.from('plants').update({ archived: !p.archived }).eq('id', id); 
-    loadFromSupabase(); 
+async function deletePlant(id) {
+    if (confirm('Apagar permanentemente?')) {
+        await _supabase.from('plants').delete().eq('id', id);
+        loadFromSupabase();
+    }
 }
+
+async function toggleArchive(id) {
+    const p = plants.find(x => x.id == id);
+    await _supabase.from('plants').update({ archived: !p.archived }).eq('id', id);
+    loadFromSupabase();
+}
+
+// ════════════════════════════════════════════════════════
+// TABULEIROS — sincronizado com Supabase
+// Usa imagens do CATALOGO em vez de emojis
+// ════════════════════════════════════════════════════════
+
+let tState = { seeds: [], trays: [] };
+let tDrag  = {};
+let tCellModal = {};
+let tSelectedCatalogIdx = 0; // índice seleccionado no picker do catálogo
+const T_COLORS = ['#5d9b3c','#e8a020','#c0392b','#2980b9','#8e44ad','#e74c3c','#16a085','#d35400','#7f8c8d','#27ae60'];
+let tSelectedColor = '#5d9b3c';
+
+// ── SUPABASE: SEEDS ────────────────────────────────────
+
+async function tLoadSeeds() {
+    const { data, error } = await _supabase
+        .from('tray_seeds')
+        .select('*')
+        .order('id', { ascending: true });
+    if (!error && data) {
+        tState.seeds = data;
+        tRenderSeeds();
+        tRenderTrays();
+    }
+}
+
+async function tAddSeedDB() {
+    const name = document.getElementById('tSeedName').value.trim();
+    if (!name) return;
+    const selectedCatalog = CATALOGO[tSelectedCatalogIdx] || CATALOGO[0];
+    const payload = {
+        user_id: currentUserId,
+        name:    name,
+        variety: '',
+        img:     selectedCatalog.img,
+        color:   tSelectedColor
+    };
+    const { data, error } = await _supabase.from('tray_seeds').insert([payload]).select().single();
+    if (error) return alert('Erro ao guardar semente: ' + error.message);
+    tState.seeds.push(data);
+    tRenderSeeds();
+    tRenderTrays();
+    document.getElementById('tSeedName').value = '';
+}
+
+async function tDeleteSeed(id) {
+    const { error } = await _supabase.from('tray_seeds').delete().eq('id', id);
+    if (error) return alert('Erro ao apagar semente: ' + error.message);
+    tState.seeds = tState.seeds.filter(s => s.id !== id);
+    tRenderSeeds();
+    tRenderTrays();
+}
+
+// ── SUPABASE: TRAYS ────────────────────────────────────
+
+async function tLoadTrays() {
+    const { data, error } = await _supabase
+        .from('trays')
+        .select('*')
+        .order('id', { ascending: true });
+    if (!error && data) {
+        tState.trays = data;
+        tRenderTrays();
+    }
+}
+
+async function tCreateTrayDB() {
+    const name = document.getElementById('newTrayName').value.trim() || `Tabuleiro`;
+    const cols = Math.max(1, Math.min(20, parseInt(document.getElementById('newTrayCols').value) || 4));
+    const rows = Math.max(1, Math.min(20, parseInt(document.getElementById('newTrayRows').value) || 4));
+    const cells = Array.from({ length: rows }, () => Array(cols).fill(null));
+    const payload = {
+        user_id: currentUserId,
+        name, cols, rows, cells,
+        created: new Date().toISOString().split('T')[0]
+    };
+    const { data, error } = await _supabase.from('trays').insert([payload]).select().single();
+    if (error) return alert('Erro ao criar tabuleiro: ' + error.message);
+    tState.trays.push(data);
+    closeNewTrayModal();
+    tRenderTrays();
+}
+
+async function tDeleteTrayDB(id) {
+    if (!confirm('Apagar este tabuleiro?')) return;
+    const { error } = await _supabase.from('trays').delete().eq('id', id);
+    if (error) return alert('Erro ao apagar: ' + error.message);
+    tState.trays = tState.trays.filter(t => t.id !== id);
+    tRenderTrays();
+}
+
+async function tRenameTrayDB(id, val) {
+    const name = val || `Tabuleiro`;
+    const { error } = await _supabase.from('trays').update({ name }).eq('id', id);
+    if (!error) {
+        const t = tState.trays.find(t => t.id === id);
+        if (t) t.name = name;
+    }
+}
+
+async function tSaveCells(trayId, cells) {
+    const { error } = await _supabase.from('trays').update({ cells }).eq('id', trayId);
+    if (error) alert('Erro ao guardar células: ' + error.message);
+}
+
+// ── INIT ───────────────────────────────────────────────
+
+async function tInit() {
+    tRenderCatalogPicker();
+    tRenderColorRow();
+    tRenderSeeds();
+    tRenderTrays();
+    await tLoadSeeds();
+    await tLoadTrays();
+    if (tState.seeds.length === 0) await tDefaultSeeds();
+}
+
+async function tDefaultSeeds() {
+    // Sementes iniciais baseadas no catálogo com imagens
+    const defaults = [
+        { name: 'Tomate',   variety: 'Cherry',  img: 'imagens/tomate.webp',            color: '#c0392b' },
+        { name: 'Jalapeño', variety: 'Jalapeño', img: 'imagens/jalapeno.webp',           color: '#5d9b3c' },
+        { name: 'Pimento',  variety: 'Vermelho', img: 'imagens/pimento_vermelho.webp',   color: '#e8a020' },
+    ];
+    for (const s of defaults) {
+        const { data } = await _supabase
+            .from('tray_seeds')
+            .insert([{ user_id: currentUserId, ...s }])
+            .select().single();
+        if (data) tState.seeds.push(data);
+    }
+    tRenderSeeds();
+}
+
+// ── CATALOG PICKER (substitui o emoji grid) ────────────
+
+function tRenderCatalogPicker() {
+    const grid = document.getElementById('tEmojiGrid');
+    if (!grid) return;
+    grid.innerHTML = CATALOGO.map((c, i) => `
+        <div onclick="tSelectCatalog(${i})" title="${c.nome}"
+            style="cursor:pointer;border-radius:8px;padding:4px;border:2px solid ${i === tSelectedCatalogIdx ? 'var(--green)' : 'transparent'};
+                   background:${i === tSelectedCatalogIdx ? 'var(--green-bg)' : 'transparent'};transition:all 0.1s;text-align:center">
+            <img src="${c.img}" alt="${c.nome}"
+                style="width:32px;height:32px;object-fit:contain;border-radius:4px;display:block;margin:0 auto"
+                onerror="this.src='${IMG_DEFAULT}'">
+            <div style="font-size:8px;color:var(--text-faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40px">${c.nome.split(' ')[0]}</div>
+        </div>`).join('');
+
+    // Atualiza o input de nome automaticamente ao selecionar
+    const nameInput = document.getElementById('tSeedName');
+    if (nameInput && !nameInput.value) nameInput.value = CATALOGO[tSelectedCatalogIdx].nome;
+}
+
+function tSelectCatalog(idx) {
+    tSelectedCatalogIdx = idx;
+    tRenderCatalogPicker();
+    // Auto-preenche o nome
+    const nameInput = document.getElementById('tSeedName');
+    if (nameInput) nameInput.value = CATALOGO[idx].nome;
+}
+
+function tRenderColorRow() {
+    document.getElementById('tColorRow').innerHTML = T_COLORS.map(c =>
+        `<div class="color-swatch ${c === tSelectedColor ? 'selected' : ''}"
+              style="background:${c}" onclick="tSelectColor('${c}')"></div>`
+    ).join('');
+}
+
+function tSelectColor(c) { tSelectedColor = c; tRenderColorRow(); }
+
+// ── PUBLIC ALIASES (chamados pelo HTML) ────────────────
+
+function tAddSeed()           { tAddSeedDB(); }
+function createTray()         { tCreateTrayDB(); }
+function tDeleteTray(id)      { tDeleteTrayDB(id); }
+function tRenameTray(id, val) { tRenameTrayDB(id, val); }
+
+// ── HELPERS: imagem de uma seed ────────────────────────
+
+function getSeedImg(s) {
+    // Se a seed já tem campo img guardado usa-o, senão tenta encontrar pelo nome
+    if (s.img) return s.img;
+    return getImgForSeed(s.name);
+}
+
+// ── SEED RENDER ────────────────────────────────────────
+
+function tRenderSeeds() {
+    const lib = document.getElementById('tray-seed-library');
+    if (!lib) return;
+    if (tState.seeds.length === 0) {
+        lib.innerHTML = '<div style="font-size:11px;color:var(--text-faint);text-align:center;padding:16px">Adiciona sementes</div>';
+        return;
+    }
+    lib.innerHTML = tState.seeds.map(s => {
+        const img = getSeedImg(s);
+        return `
+        <div class="seed-item" draggable="true"
+            ondragstart="tOnSeedDragStart(event, ${s.id})"
+            ondragend="tOnSeedDragEnd(event)">
+            <div style="width:32px;height:32px;border-radius:6px;overflow:hidden;flex-shrink:0;background:var(--bg-subtle);border:1px solid var(--border)">
+                <img src="${img}" alt="${s.name}"
+                    style="width:100%;height:100%;object-fit:contain"
+                    onerror="this.src='${IMG_DEFAULT}'">
+            </div>
+            <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    ${s.name}${s.variety ? ` <span style="color:var(--text-faint);font-size:10px">${s.variety}</span>` : ''}
+                </div>
+            </div>
+            <div style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></div>
+            <div onclick="tDeleteSeed(${s.id})"
+                style="cursor:pointer;font-size:11px;color:var(--text-faint);padding:2px 4px" title="Remover">✕</div>
+        </div>`;
+    }).join('');
+}
+
+// ── TRAY MODAL ─────────────────────────────────────────
+
+function openNewTrayModal() {
+    document.getElementById('newTrayName').value = '';
+    document.getElementById('newTrayCols').value = 4;
+    document.getElementById('newTrayRows').value = 4;
+    document.getElementById('newTrayModal').classList.add('open');
+    setTimeout(() => document.getElementById('newTrayName').focus(), 100);
+}
+
+function closeNewTrayModal() { document.getElementById('newTrayModal').classList.remove('open'); }
+
+// ── TRAY RENDER ────────────────────────────────────────
+
+function tRenderTrays() {
+    const c = document.getElementById('tTraysContainer');
+    if (!c) return;
+    if (tState.trays.length === 0) {
+        c.innerHTML = `
+            <div class="no-trays">
+                <div style="font-size:48px;margin-bottom:12px">🌿</div>
+                <div style="font-family:'Lora',serif;font-size:18px;font-weight:600;margin-bottom:8px">Sem tabuleiros</div>
+                <div style="font-size:13px;color:var(--text-faint)">Cria um tabuleiro para começar</div>
+            </div>`;
+        return;
+    }
+
+    c.innerHTML = tState.trays.map(tray => {
+        const filled = tray.cells.flat().filter(Boolean).length;
+        const total  = tray.rows * tray.cols;
+        const colW   = Math.max(54, Math.min(86, Math.floor(380 / tray.cols) - 6));
+
+        let legendSeeds = {};
+        tray.cells.flat().forEach(cell => {
+            if (cell) {
+                const s = tState.seeds.find(s => s.id === cell.seedId);
+                if (s) legendSeeds[s.id] = s;
+            }
+        });
+
+        const cellsHTML = tray.cells.map((row, ri) => row.map((cell, ci) => {
+            const pos = `${String.fromCharCode(65 + ci)}${ri + 1}`;
+            if (cell) {
+                const s = tState.seeds.find(s => s.id === cell.seedId);
+                if (!s) return tEmptyCell(tray.id, ri, ci, colW, pos);
+                const img = getSeedImg(s);
+                return `
+                    <div class="tray-cell filled"
+                        style="width:${colW}px;border-color:${s.color}55;background:${s.color}14"
+                        draggable="true"
+                        ondragstart="tOnCellDragStart(event,${tray.id},${ri},${ci})"
+                        ondragend="tOnCellDragEnd(event)"
+                        ondragover="tOnDragOver(event)"
+                        ondragleave="tOnDragLeave(event)"
+                        ondrop="tOnDrop(event,${tray.id},${ri},${ci})"
+                        onclick="tOpenCellModal(${tray.id},${ri},${ci})">
+                        <span class="cell-pos">${pos}</span>
+                        <div class="cell-remove" onclick="tRemoveCell(event,${tray.id},${ri},${ci})">✕</div>
+                        <img src="${img}" alt="${s.name}"
+                            style="width:32px;height:32px;object-fit:contain;transition:transform 0.15s"
+                            onerror="this.src='${IMG_DEFAULT}'"
+                            class="cell-img">
+                        <span class="cell-label" style="color:${s.color}">${s.name}</span>
+                        ${cell.date ? `<span style="font-size:8px;color:var(--text-faint);position:absolute;bottom:3px;left:0;right:0;text-align:center">${cell.date.slice(5)}</span>` : ''}
+                    </div>`;
+            }
+            return tEmptyCell(tray.id, ri, ci, colW, pos);
+        }).join('')).join('');
+
+        const legend = Object.values(legendSeeds).map(s => {
+            const img = getSeedImg(s);
+            return `
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted)">
+                <img src="${img}" alt="${s.name}"
+                    style="width:16px;height:16px;object-fit:contain;border-radius:3px"
+                    onerror="this.src='${IMG_DEFAULT}'">
+                ${s.name}${s.variety ? ' · ' + s.variety : ''}
+            </div>`;
+        }).join('');
+
+        return `
+            <div class="tray-wrapper">
+                <div class="tray-header">
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span class="badge badge-muted">${tray.cols}×${tray.rows}</span>
+                        <input class="tray-name-input" value="${tray.name}"
+                            onblur="tRenameTray(${tray.id},this.value)"
+                            onkeydown="if(event.key==='Enter')this.blur()">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-faint)">${filled}/${total}</span>
+                        <button onclick="tDeleteTray(${tray.id})"
+                            style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)"
+                            onmouseover="this.style.color='var(--red)'"
+                            onmouseout="this.style.color='var(--text-faint)'">🗑</button>
+                    </div>
+                </div>
+                <div style="padding:16px;overflow-x:auto">
+                    <div style="display:grid;grid-template-columns:repeat(${tray.cols},${colW}px);gap:5px;width:fit-content">
+                        ${cellsHTML}
+                    </div>
+                </div>
+                ${legend ? `<div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px">${legend}</div>` : ''}
+            </div>`;
+    }).join('');
+}
+
+function tEmptyCell(trayId, ri, ci, colW, pos) {
+    return `
+        <div class="tray-cell" style="width:${colW}px"
+            ondragover="tOnDragOver(event)"
+            ondragleave="tOnDragLeave(event)"
+            ondrop="tOnDrop(event,${trayId},${ri},${ci})"
+            onclick="tOpenCellModal(${trayId},${ri},${ci})">
+            <span class="cell-pos">${pos}</span>
+            <span style="font-size:16px;color:var(--text-faint)">+</span>
+        </div>`;
+}
+
+async function tRemoveCell(e, trayId, row, col) {
+    e.stopPropagation();
+    const tray = tState.trays.find(t => t.id === trayId);
+    if (!tray) return;
+    tray.cells[row][col] = null;
+    await tSaveCells(trayId, tray.cells);
+    tRenderTrays();
+}
+
+// ── CELL MODAL ─────────────────────────────────────────
+
+function tOpenCellModal(trayId, row, col) {
+    tCellModal = { trayId, row, col };
+    const tray = tState.trays.find(t => t.id === trayId);
+    const cell = tray?.cells[row][col];
+    const pos  = `${String.fromCharCode(65 + col)}${row + 1}`;
+
+    document.getElementById('cellModalTitle').textContent = `Vaso ${pos} · ${tray.name}`;
+    const sel = document.getElementById('cellSeedSelect');
+    sel.innerHTML = '<option value="">— Escolher —</option>' +
+        tState.seeds.map(s =>
+            `<option value="${s.id}" ${cell?.seedId === s.id ? 'selected' : ''}>
+                ${s.name}${s.variety ? ' · ' + s.variety : ''}
+            </option>`
+        ).join('');
+
+    document.getElementById('cellDate').value  = cell?.date  || new Date().toISOString().split('T')[0];
+    document.getElementById('cellQty').value   = cell?.qty   || 1;
+    document.getElementById('cellNotes').value = cell?.notes || '';
+    document.getElementById('clearCellBtn').style.display = cell ? '' : 'none';
+    document.getElementById('cellModal').classList.add('open');
+}
+
+function closeCellModal() { document.getElementById('cellModal').classList.remove('open'); }
+
+async function saveCellModal() {
+    const seedId = parseInt(document.getElementById('cellSeedSelect').value);
+    if (!seedId) { closeCellModal(); return; }
+    const { trayId, row, col } = tCellModal;
+    const tray = tState.trays.find(t => t.id === trayId);
+    tray.cells[row][col] = {
+        seedId,
+        date:  document.getElementById('cellDate').value,
+        qty:   parseInt(document.getElementById('cellQty').value) || 1,
+        notes: document.getElementById('cellNotes').value.trim()
+    };
+    await tSaveCells(trayId, tray.cells);
+    closeCellModal();
+    tRenderTrays();
+}
+
+async function clearCell() {
+    const { trayId, row, col } = tCellModal;
+    const tray = tState.trays.find(t => t.id === trayId);
+    tray.cells[row][col] = null;
+    await tSaveCells(trayId, tray.cells);
+    closeCellModal();
+    tRenderTrays();
+}
+
+// ── DRAG & DROP ────────────────────────────────────────
+
+const ghost = document.getElementById('dragGhost');
+document.addEventListener('dragover', e => {
+    ghost.style.left = e.clientX + 14 + 'px';
+    ghost.style.top  = e.clientY + 14 + 'px';
+});
+
+function tShowGhost(e, img, name) {
+    // Ghost usa imagem em vez de emoji
+    const ghostEmoji = document.getElementById('dragGhostEmoji');
+    ghostEmoji.innerHTML = `<img src="${img}" alt="${name}" style="width:24px;height:24px;object-fit:contain" onerror="this.src='${IMG_DEFAULT}'">`;
+    document.getElementById('dragGhostName').textContent = name;
+    ghost.style.display = 'flex';
+}
+
+function tHideDrag() {
+    ghost.style.display = 'none';
+    document.querySelectorAll('.tray-cell.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function tOnSeedDragStart(e, seedId) {
+    tDrag = { type: 'library', seedId };
+    const s = tState.seeds.find(s => s.id === seedId);
+    e.dataTransfer.effectAllowed = 'copy';
+    e.currentTarget.classList.add('dragging');
+    tShowGhost(e, getSeedImg(s), s.name);
+}
+
+function tOnSeedDragEnd(e) { e.currentTarget.classList.remove('dragging'); tHideDrag(); }
+
+function tOnCellDragStart(e, trayId, row, col) {
+    const tray = tState.trays.find(t => t.id === trayId);
+    const cell = tray?.cells[row][col];
+    if (!cell) return;
+    tDrag = { type: 'cell', seedId: cell.seedId, fromTrayId: trayId, fromRow: row, fromCol: col, cellData: { ...cell } };
+    e.dataTransfer.effectAllowed = 'move';
+    const s = tState.seeds.find(s => s.id === cell.seedId);
+    tShowGhost(e, getSeedImg(s) || IMG_DEFAULT, s?.name || '');
+}
+
+function tOnCellDragEnd() { tHideDrag(); }
+
+function tOnDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function tOnDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+async function tOnDrop(e, trayId, row, col) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    const tray = tState.trays.find(t => t.id === trayId);
+    if (!tray) return;
+
+    if (tDrag.type === 'library') {
+        tray.cells[row][col] = {
+            seedId: tDrag.seedId,
+            date:   new Date().toISOString().split('T')[0],
+            qty: 1, notes: ''
+        };
+        await tSaveCells(trayId, tray.cells);
+    } else if (tDrag.type === 'cell') {
+        const fromTray = tState.trays.find(t => t.id === tDrag.fromTrayId);
+        const dest     = tray.cells[row][col] ? { ...tray.cells[row][col] } : null;
+        tray.cells[row][col] = { ...tDrag.cellData };
+        if (fromTray) {
+            fromTray.cells[tDrag.fromRow][tDrag.fromCol] = dest;
+            if (fromTray.id !== trayId) await tSaveCells(fromTray.id, fromTray.cells);
+        }
+        await tSaveCells(trayId, tray.cells);
+    }
+
+    tDrag = {};
+    tRenderTrays();
+}
+
+// ── MODAL BACKDROPS ────────────────────────────────────
+
+document.getElementById('cellModal').addEventListener('click', function(e) {
+    if (e.target === this) closeCellModal();
+});
+document.getElementById('newTrayModal').addEventListener('click', function(e) {
+    if (e.target === this) closeNewTrayModal();
+});
