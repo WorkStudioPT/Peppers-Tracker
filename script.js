@@ -1370,36 +1370,60 @@ async function saveAndWriteNfc() {
     const editId = document.getElementById('nfcEditTagId').value;
     if (!data.label && !data.variety) return alert('Preenche pelo menos o nome ou a variedade.');
 
-    // Save to DB first
-    let savedId = editId ? parseInt(editId) : null;
-    if (editId) {
-        await _supabase.from('nfc_tags').update(data).eq('id', editId);
-    } else {
-        const { data: inserted } = await _supabase
-            .from('nfc_tags')
-            .insert([{ ...data, user_id: currentUserId }])
-            .select()
-            .single();
-        savedId = inserted?.id;
-    }
+    // Disable button to prevent multiple clicks while waiting
+    const writeBtn = document.getElementById('nfcWriteBtn');
+    const saveBtn  = document.getElementById('nfcSaveOnlyBtn');
+    writeBtn.disabled = true;
+    saveBtn.disabled  = true;
 
-    if (!savedId) return nfcShowWriteStatus('❌ Erro ao guardar no servidor.', 'error');
-
-    // Build URL that opens the app and shows the tag
-    // Uses current page URL + ?nfc_id=X so Android opens browser → app handles it
-    const appUrl = window.location.origin + window.location.pathname + '?nfc_id=' + savedId;
-
+    // Step 1: write to physical tag FIRST — no DB changes yet
+    // We need a temporary URL if new tag (use placeholder, update after)
     nfcShowWriteStatus('⏳ Aproxima o telemóvel da tag NFC…', 'info');
+
     try {
         const ndef = new NDEFReader();
-        await ndef.write({
-            records: [{ recordType: 'url', data: appUrl }]
-        });
+
+        if (editId) {
+            // Editing existing tag — ID already known, write URL immediately
+            const appUrl = window.location.origin + window.location.pathname + '?nfc_id=' + editId;
+            await ndef.write({ records: [{ recordType: 'url', data: appUrl }] });
+            // Tag written OK — now update DB
+            await _supabase.from('nfc_tags').update(data).eq('id', editId);
+        } else {
+            // New tag — insert into DB to get the ID, then write URL, rollback if write fails
+            const { data: inserted, error: insertErr } = await _supabase
+                .from('nfc_tags')
+                .insert([{ ...data, user_id: currentUserId }])
+                .select()
+                .single();
+            if (insertErr || !inserted) {
+                nfcShowWriteStatus('❌ Erro ao criar registo no servidor.', 'error');
+                writeBtn.disabled = false;
+                saveBtn.disabled  = false;
+                return;
+            }
+            const savedId = inserted.id;
+            const appUrl  = window.location.origin + window.location.pathname + '?nfc_id=' + savedId;
+            try {
+                await ndef.write({ records: [{ recordType: 'url', data: appUrl }] });
+            } catch (writeErr) {
+                // Tag write failed — delete the DB record we just created
+                await _supabase.from('nfc_tags').delete().eq('id', savedId);
+                nfcShowWriteStatus('❌ Erro ao gravar na tag: ' + writeErr.message, 'error');
+                writeBtn.disabled = false;
+                saveBtn.disabled  = false;
+                return;
+            }
+        }
+
         nfcShowWriteStatus('✅ Tag gravada com sucesso!', 'ok');
         await nfcLoadTags();
         setTimeout(() => { closeNfcWriteModal(); nfcRender(); }, 1200);
+
     } catch (err) {
         nfcShowWriteStatus('❌ Erro ao gravar: ' + err.message, 'error');
+        writeBtn.disabled = false;
+        saveBtn.disabled  = false;
     }
 }
 
