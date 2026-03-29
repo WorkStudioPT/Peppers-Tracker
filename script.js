@@ -125,13 +125,13 @@ function toggleDark() {
 // TABS
 // ════════════════════════════════════════════════════════
 
-function switchTab(tab) {
+async function switchTab(tab) {
     ['tracker', 'tray', 'nfc'].forEach(t => {
         document.getElementById(`panel-${t}`).style.display = t === tab ? '' : 'none';
         document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
     if (tab === 'tray') { tRenderSeeds(); tRenderTrays(); }
-    if (tab === 'nfc')  { nfcRender(); }
+    if (tab === 'nfc')  { nfcRenderLoading(); await nfcLoadTags(); nfcRender(); }
 }
 
 // ════════════════════════════════════════════════════════
@@ -1049,6 +1049,20 @@ function nfcPopulateCatalog() {
 }
 
 // ── RENDER ────────────────────────────────────────────
+
+function nfcRenderLoading() {
+    const container = document.getElementById('nfc-panel-inner');
+    if (!container) return;
+    container.innerHTML = `
+        <div style="max-width:700px;margin:0 auto">
+            <div class="nfc-banner nfc-banner-ok" style="opacity:0.5">A carregar…</div>
+            <div style="display:flex;gap:10px;margin-bottom:20px">
+                <div style="height:42px;width:110px;background:var(--bg-subtle);border-radius:10px;animation:nfcPulse 1.2s infinite"></div>
+                <div style="height:42px;width:130px;background:var(--bg-subtle);border-radius:10px;animation:nfcPulse 1.2s infinite"></div>
+            </div>
+            ${[1,2,3].map(()=>`<div style="height:84px;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;margin-bottom:12px;animation:nfcPulse 1.2s infinite"></div>`).join('')}
+        </div>`;
+}
 
 function nfcRender() {
     nfcPopulateCatalog();
