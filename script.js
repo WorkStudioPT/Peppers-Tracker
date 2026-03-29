@@ -54,6 +54,7 @@ _supabase.auth.onAuthStateChange((event, session) => {
         loadFromSupabase();
         document.getElementById('startDate').valueAsDate = new Date();
         tInit();
+        nfcInit();
     } else {
         currentUserId = null;
         document.getElementById('authOverlay').classList.remove('hidden');
@@ -125,11 +126,12 @@ function toggleDark() {
 // ════════════════════════════════════════════════════════
 
 function switchTab(tab) {
-    ['tracker', 'tray'].forEach(t => {
+    ['tracker', 'tray', 'nfc'].forEach(t => {
         document.getElementById(`panel-${t}`).style.display = t === tab ? '' : 'none';
         document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
     if (tab === 'tray') { tRenderSeeds(); tRenderTrays(); }
+    if (tab === 'nfc')  { nfcRender(); }
 }
 
 // ════════════════════════════════════════════════════════
@@ -1014,3 +1016,387 @@ document.getElementById('newTrayModal').addEventListener('click', function(e) {
 document.getElementById('editTrayModal').addEventListener('click', function(e) {
     if (e.target === this) closeEditTrayModal();
 });
+
+// ════════════════════════════════════════════════════════
+// NFC MODULE
+// ════════════════════════════════════════════════════════
+
+let nfcTags        = [];      // loaded from Supabase
+let nfcReader      = null;    // NDEFReader instance (scan mode)
+let nfcWriter      = null;    // NDEFReader instance (write mode)
+let nfcScanActive  = false;
+let nfcResultTagId = null;    // tag id shown in result modal
+
+// ── INIT ──────────────────────────────────────────────
+
+async function nfcInit() {
+    await nfcLoadTags();
+}
+
+async function nfcLoadTags() {
+    const { data, error } = await _supabase
+        .from('nfc_tags')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (!error) nfcTags = data || [];
+}
+
+// Also populate the pepper datalist for nfc modal
+function nfcPopulateCatalog() {
+    const dl = document.getElementById('nfcPepperCatalog');
+    if (!dl) return;
+    dl.innerHTML = CATALOGO.map(c => `<option value="${c.nome}">`).join('');
+}
+
+// ── RENDER ────────────────────────────────────────────
+
+function nfcRender() {
+    nfcPopulateCatalog();
+    const container = document.getElementById('nfc-panel-inner');
+    if (!container) return;
+
+    const nfcSupported = 'NDEFReader' in window;
+
+    const tagsHTML = nfcTags.length === 0
+        ? `<div style="text-align:center;padding:40px 20px;color:var(--text-faint)">
+               <div style="font-size:40px;margin-bottom:10px">📡</div>
+               <div style="font-family:'Lora',serif;font-size:16px;font-weight:600;margin-bottom:6px">Sem tags registadas</div>
+               <div style="font-size:12px">Cria uma tag e grava-a numa etiqueta NFC</div>
+           </div>`
+        : nfcTags.map(tag => nfcTagCard(tag)).join('');
+
+    container.innerHTML = `
+        <div style="max-width:700px;margin:0 auto">
+
+            <!-- NFC STATUS BANNER -->
+            ${!nfcSupported ? `
+            <div class="nfc-banner nfc-banner-warn">
+                ⚠️ Web NFC não suportado neste browser. Usa <strong>Chrome para Android</strong> para ler/gravar tags físicas. Podes na mesma criar e gerir as tags aqui.
+            </div>` : `
+            <div class="nfc-banner nfc-banner-ok" id="nfcStatusBanner">
+                ✅ Web NFC disponível. Podes ler e gravar tags NFC.
+            </div>`}
+
+            <!-- ACTIONS -->
+            <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+                <button class="btn-primary" onclick="openNfcWriteModal(null)">+ Nova Tag</button>
+                ${nfcSupported ? `
+                <button class="btn-primary" id="nfcScanBtn" onclick="nfcToggleScan()"
+                    style="background:var(--orange)">📡 Iniciar Scan</button>` : ''}
+            </div>
+
+            <!-- SCAN STATUS -->
+            <div id="nfcScanStatus" style="display:none" class="nfc-scan-pulse">
+                <div style="font-size:28px;margin-bottom:8px">📡</div>
+                <div style="font-family:'Lora',serif;font-weight:700;font-size:16px;margin-bottom:4px">À espera de tag NFC…</div>
+                <div style="font-size:12px;color:var(--text-muted)">Aproxima o telemóvel de uma tag NFC</div>
+            </div>
+
+            <!-- TAG LIST -->
+            <div id="nfcTagList">
+                ${tagsHTML}
+            </div>
+        </div>`;
+}
+
+function nfcTagCard(tag) {
+    const img = getImgForSeed(tag.variety);
+    const dateStr = tag.plant_date
+        ? new Date(tag.plant_date + 'T00:00:00').toLocaleDateString('pt-PT', { day:'2-digit', month:'short', year:'numeric' })
+        : '—';
+    return `
+        <div class="nfc-tag-card fade-in">
+            <div style="display:flex;gap:14px;align-items:center">
+                <div class="plant-img-wrap" style="width:52px;height:52px;flex-shrink:0">
+                    <img src="${img}" alt="${tag.variety||''}" onerror="this.src='${IMG_DEFAULT}'" style="width:100%;height:100%;object-fit:contain;padding:4px">
+                </div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-family:'Lora',serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tag.label || 'Tag sem nome'}</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                        ${tag.variety ? `<span class="badge badge-green">${tag.variety}</span>` : ''}
+                        ${tag.location ? `<span class="badge badge-muted">📍 ${tag.location}</span>` : ''}
+                        <span class="badge badge-muted">📅 ${dateStr}</span>
+                    </div>
+                    ${tag.notes ? `<div style="font-size:11px;color:var(--text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tag.notes}</div>` : ''}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+                    <button onclick="openNfcWriteModal(${tag.id})" class="btn-ghost" style="padding:6px 12px;font-size:11px">✏️</button>
+                    ${'NDEFReader' in window ? `<button onclick="nfcWriteTag(${tag.id})" class="btn-ghost" style="padding:6px 10px;font-size:11px;color:var(--orange);border-color:var(--orange)">📡</button>` : ''}
+                    <button onclick="nfcDeleteTag(${tag.id})" class="btn-ghost" style="padding:6px 12px;font-size:11px;color:var(--red);border-color:var(--red)">🗑</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+// ── SCAN ──────────────────────────────────────────────
+
+async function nfcToggleScan() {
+    if (nfcScanActive) {
+        nfcStopScan();
+    } else {
+        await nfcStartScan();
+    }
+}
+
+async function nfcStartScan() {
+    try {
+        nfcReader = new NDEFReader();
+        await nfcReader.scan();
+        nfcScanActive = true;
+        document.getElementById('nfcScanBtn').textContent = '⏹ Parar Scan';
+        document.getElementById('nfcScanBtn').style.background = 'var(--red)';
+        document.getElementById('nfcScanStatus').style.display = 'block';
+        nfcUpdateBanner('scanning');
+
+        nfcReader.onreading = ({ message, serialNumber }) => {
+            nfcHandleRead(message, serialNumber);
+        };
+        nfcReader.onreadingerror = () => {
+            nfcUpdateBanner('error');
+        };
+    } catch (err) {
+        alert('Erro ao iniciar scan NFC: ' + err.message);
+    }
+}
+
+function nfcStopScan() {
+    nfcScanActive = false;
+    nfcReader = null;
+    const btn = document.getElementById('nfcScanBtn');
+    if (btn) { btn.textContent = '📡 Iniciar Scan'; btn.style.background = 'var(--orange)'; }
+    const status = document.getElementById('nfcScanStatus');
+    if (status) status.style.display = 'none';
+    nfcUpdateBanner('ok');
+}
+
+function nfcUpdateBanner(state) {
+    const banner = document.getElementById('nfcStatusBanner');
+    if (!banner) return;
+    if (state === 'scanning') {
+        banner.className = 'nfc-banner nfc-banner-scanning';
+        banner.innerHTML = '📡 A fazer scan… aproxima o telemóvel de uma tag NFC.';
+    } else if (state === 'error') {
+        banner.className = 'nfc-banner nfc-banner-warn';
+        banner.innerHTML = '⚠️ Erro ao ler a tag. Tenta novamente.';
+    } else {
+        banner.className = 'nfc-banner nfc-banner-ok';
+        banner.innerHTML = '✅ Web NFC disponível. Podes ler e gravar tags NFC.';
+    }
+}
+
+function nfcHandleRead(message, serialNumber) {
+    nfcStopScan();
+
+    // Try to decode NDEF text record
+    let tagData = null;
+    for (const record of message.records) {
+        if (record.recordType === 'text') {
+            const decoder = new TextDecoder(record.encoding || 'utf-8');
+            const text    = decoder.decode(record.data);
+            try { tagData = JSON.parse(text); } catch { tagData = { raw: text }; }
+            break;
+        }
+        if (record.recordType === 'url') {
+            const decoder = new TextDecoder();
+            tagData = { url: decoder.decode(record.data) };
+            break;
+        }
+    }
+
+    // Try to match with a stored tag by serial or data
+    let matchedTag = null;
+    if (tagData?.nfc_id) {
+        matchedTag = nfcTags.find(t => t.nfc_id === tagData.nfc_id);
+    }
+    if (!matchedTag && serialNumber) {
+        matchedTag = nfcTags.find(t => t.serial === serialNumber);
+    }
+
+    nfcShowResultModal(matchedTag, tagData, serialNumber);
+}
+
+// ── RESULT MODAL ──────────────────────────────────────
+
+function nfcShowResultModal(tag, tagData, serial) {
+    nfcResultTagId = tag?.id || null;
+    const img = getImgForSeed(tag?.variety || tagData?.variety);
+
+    let html = '';
+    if (tag) {
+        const dateStr = tag.plant_date
+            ? new Date(tag.plant_date + 'T00:00:00').toLocaleDateString('pt-PT', { day:'2-digit', month:'long', year:'numeric' })
+            : '—';
+        html = `
+            <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:16px">
+                <div class="plant-img-wrap" style="width:64px;height:64px;flex-shrink:0">
+                    <img src="${img}" alt="${tag.variety||''}" onerror="this.src='${IMG_DEFAULT}'" style="width:100%;height:100%;object-fit:contain;padding:4px">
+                </div>
+                <div>
+                    <div style="font-family:'Lora',serif;font-size:18px;font-weight:700;margin-bottom:6px">${tag.label || 'Tag sem nome'}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        ${tag.variety ? `<span class="badge badge-green">${tag.variety}</span>` : ''}
+                        ${tag.location ? `<span class="badge badge-muted">📍 ${tag.location}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            <div class="nfc-detail-grid">
+                <div class="nfc-detail-item"><span class="field-label">Data Plantação</span><span>${dateStr}</span></div>
+                ${tag.notes ? `<div class="nfc-detail-item" style="grid-column:1/-1"><span class="field-label">Notas</span><span>${tag.notes}</span></div>` : ''}
+                ${serial ? `<div class="nfc-detail-item"><span class="field-label">Serial NFC</span><span style="font-family:'DM Mono',monospace;font-size:10px">${serial}</span></div>` : ''}
+            </div>`;
+        document.getElementById('nfcResultEditBtn').style.display = '';
+    } else if (tagData?.raw) {
+        html = `<div style="padding:12px;background:var(--bg-subtle);border-radius:10px;font-family:'DM Mono',monospace;font-size:12px;word-break:break-all">${tagData.raw}</div>
+                <div style="margin-top:12px;font-size:12px;color:var(--text-faint)">Esta tag não está registada no Garden. Cria uma nova tag com este conteúdo.</div>`;
+        document.getElementById('nfcResultEditBtn').style.display = 'none';
+    } else {
+        html = `<div style="font-size:13px;color:var(--text-muted);padding:12px 0">Tag lida mas sem dados reconhecidos.<br><span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-faint)">${serial || ''}</span></div>`;
+        document.getElementById('nfcResultEditBtn').style.display = 'none';
+    }
+
+    document.getElementById('nfcResultContent').innerHTML = html;
+    document.getElementById('nfcResultModal').classList.add('open');
+}
+
+function closeNfcResultModal() {
+    document.getElementById('nfcResultModal').classList.remove('open');
+}
+
+function openNfcEditFromResult() {
+    closeNfcResultModal();
+    if (nfcResultTagId) openNfcWriteModal(nfcResultTagId);
+}
+
+// ── WRITE/EDIT MODAL ──────────────────────────────────
+
+function openNfcWriteModal(tagId) {
+    const tag = tagId ? nfcTags.find(t => t.id === tagId) : null;
+    document.getElementById('nfcWriteModalTitle').textContent = tag ? '✏️ Editar Tag' : '+ Nova Tag NFC';
+    document.getElementById('nfcEditTagId').value   = tag?.id || '';
+    document.getElementById('nfcTagLabel').value    = tag?.label || '';
+    document.getElementById('nfcTagVariety').value  = tag?.variety || '';
+    document.getElementById('nfcTagDate').value     = tag?.plant_date || new Date().toISOString().split('T')[0];
+    document.getElementById('nfcTagLocation').value = tag?.location || '';
+    document.getElementById('nfcTagNotes').value    = tag?.notes || '';
+    document.getElementById('nfcWriteStatus').style.display = 'none';
+
+    const writeBtn = document.getElementById('nfcWriteBtn');
+    writeBtn.style.display = 'NDEFReader' in window ? '' : 'none';
+
+    document.getElementById('nfcWriteModal').classList.add('open');
+}
+
+function closeNfcWriteModal() {
+    document.getElementById('nfcWriteModal').classList.remove('open');
+    if (nfcWriter) { nfcWriter = null; }
+}
+
+function nfcGetFormData() {
+    return {
+        label:      document.getElementById('nfcTagLabel').value.trim(),
+        variety:    document.getElementById('nfcTagVariety').value.trim(),
+        plant_date: document.getElementById('nfcTagDate').value || null,
+        location:   document.getElementById('nfcTagLocation').value.trim(),
+        notes:      document.getElementById('nfcTagNotes').value.trim(),
+    };
+}
+
+async function saveNfcTagOnly() {
+    const data   = nfcGetFormData();
+    const editId = document.getElementById('nfcEditTagId').value;
+    if (!data.label && !data.variety) return alert('Preenche pelo menos o nome ou a variedade.');
+
+    if (editId) {
+        await _supabase.from('nfc_tags').update(data).eq('id', editId);
+    } else {
+        await _supabase.from('nfc_tags').insert([{ ...data, user_id: currentUserId }]);
+    }
+    closeNfcWriteModal();
+    await nfcLoadTags();
+    nfcRender();
+}
+
+async function saveAndWriteNfc() {
+    const data   = nfcGetFormData();
+    const editId = document.getElementById('nfcEditTagId').value;
+    if (!data.label && !data.variety) return alert('Preenche pelo menos o nome ou a variedade.');
+
+    // Save to DB first
+    let savedId = editId;
+    if (editId) {
+        await _supabase.from('nfc_tags').update(data).eq('id', editId);
+    } else {
+        const { data: inserted } = await _supabase
+            .from('nfc_tags')
+            .insert([{ ...data, user_id: currentUserId }])
+            .select()
+            .single();
+        savedId = inserted?.id;
+    }
+
+    // Now write to physical tag
+    nfcShowWriteStatus('⏳ Aproxima o telemóvel da tag NFC…', 'info');
+    try {
+        const ndef    = new NDEFReader();
+        const payload = JSON.stringify({ nfc_id: savedId, label: data.label, variety: data.variety, plant_date: data.plant_date, location: data.location });
+        await ndef.write({ records: [{ recordType: 'text', data: payload }] });
+        nfcShowWriteStatus('✅ Tag gravada com sucesso!', 'ok');
+        // Also store serial if available
+        await nfcLoadTags();
+        setTimeout(() => { closeNfcWriteModal(); nfcRender(); }, 1200);
+    } catch (err) {
+        nfcShowWriteStatus('❌ Erro ao gravar: ' + err.message, 'error');
+    }
+}
+
+function nfcShowWriteStatus(msg, type) {
+    const el = document.getElementById('nfcWriteStatus');
+    if (!el) return;
+    el.style.display = '';
+    const colors = { info: 'var(--orange-bg)', ok: 'var(--green-bg)', error: 'var(--red-bg)' };
+    const borders = { info: '#f0b070', ok: 'var(--green)', error: 'var(--red)' };
+    el.innerHTML = `<div style="background:${colors[type]};border:1px solid ${borders[type]};border-radius:10px;padding:10px 14px;font-size:12px;font-weight:600">${msg}</div>`;
+}
+
+async function nfcWriteTag(tagId) {
+    const tag = nfcTags.find(t => t.id === tagId);
+    if (!tag) return;
+
+    const status = document.getElementById('nfcStatusBanner');
+    if (status) { status.className = 'nfc-banner nfc-banner-scanning'; status.innerHTML = '📡 Aproxima o telemóvel da tag NFC para gravar…'; }
+
+    try {
+        const ndef    = new NDEFReader();
+        const payload = JSON.stringify({ nfc_id: tag.id, label: tag.label, variety: tag.variety, plant_date: tag.plant_date, location: tag.location });
+        await ndef.write({ records: [{ recordType: 'text', data: payload }] });
+        if (status) { status.className = 'nfc-banner nfc-banner-ok'; status.innerHTML = `✅ Tag "${tag.label}" gravada com sucesso!`; }
+        setTimeout(() => { if (status) { status.className = 'nfc-banner nfc-banner-ok'; status.innerHTML = '✅ Web NFC disponível.'; } }, 3000);
+    } catch (err) {
+        if (status) { status.className = 'nfc-banner nfc-banner-warn'; status.innerHTML = '❌ Erro ao gravar tag: ' + err.message; }
+    }
+}
+
+async function nfcDeleteTag(tagId) {
+    if (!confirm('Apagar esta tag permanentemente?')) return;
+    await _supabase.from('nfc_tags').delete().eq('id', tagId);
+    await nfcLoadTags();
+    nfcRender();
+}
+
+// ── MODAL BACKDROPS ────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('nfcResultModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeNfcResultModal();
+    });
+    document.getElementById('nfcWriteModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeNfcWriteModal();
+    });
+});
+
+// Patch loadFromSupabase to also init NFC when logged in
+const _origNfcInit = nfcInit;
+(function patchAuth() {
+    const origLoad = loadFromSupabase;
+    window.loadFromSupabaseOriginal = origLoad;
+})();

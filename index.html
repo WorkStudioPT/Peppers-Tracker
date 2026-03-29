@@ -62,6 +62,7 @@
         <div class="tabs">
             <button class="tab-btn active" id="tab-tracker" onclick="switchTab('tracker')">🌶️ Tracker</button>
             <button class="tab-btn"        id="tab-tray"    onclick="switchTab('tray')">🌿 Tabuleiros</button>
+            <button class="tab-btn"        id="tab-nfc"     onclick="switchTab('nfc')">📡 NFC</button>
         </div>
 
         <!-- TAB: PEPPER TRACKER -->
@@ -177,6 +178,13 @@
             </div>
         </div>
 
+        <!-- TAB: NFC -->
+        <div id="panel-nfc" style="display:none" class="fade-in">
+            <div id="nfc-panel-inner">
+                <!-- will be rendered by JS -->
+            </div>
+        </div>
+
     </div><!-- /app-wrap -->
 </div><!-- /appContent -->
 
@@ -271,6 +279,57 @@
             <div style="display:flex;gap:8px">
                 <button class="btn-ghost" onclick="closeEditTrayModal()">Cancelar</button>
                 <button class="btn-primary" onclick="saveEditTray()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: NFC scan result -->
+<div class="modal-overlay" id="nfcResultModal">
+    <div class="modal-box" style="max-width:420px">
+        <div class="modal-title">📡 Tag Lida</div>
+        <div id="nfcResultContent"></div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+            <button class="btn-ghost" onclick="closeNfcResultModal()">Fechar</button>
+            <button class="btn-primary" id="nfcResultEditBtn" onclick="openNfcEditFromResult()" style="display:none">✏️ Editar Tag</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: NFC write/edit tag -->
+<div class="modal-overlay" id="nfcWriteModal">
+    <div class="modal-box" style="max-width:420px">
+        <div class="modal-title" id="nfcWriteModalTitle">Nova Tag NFC</div>
+        <input type="hidden" id="nfcEditTagId">
+        <div class="space-y">
+            <div>
+                <label class="field-label">Nome / Etiqueta</label>
+                <input type="text" id="nfcTagLabel" placeholder="Ex: Vaso A1 – Jalapeño">
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Variedade</label>
+                    <input type="text" id="nfcTagVariety" list="nfcPepperCatalog" placeholder="Ex: Jalapeño">
+                    <datalist id="nfcPepperCatalog"></datalist>
+                </div>
+                <div>
+                    <label class="field-label">Data Plantação</label>
+                    <input type="date" id="nfcTagDate">
+                </div>
+            </div>
+            <div>
+                <label class="field-label">Localização</label>
+                <input type="text" id="nfcTagLocation" placeholder="Ex: Estufa Norte, Vaso 3">
+            </div>
+            <div>
+                <label class="field-label">Notas</label>
+                <textarea id="nfcTagNotes" rows="2" placeholder="Observações sobre esta planta..." style="height:auto;resize:none;font-size:13px;padding:8px 12px"></textarea>
+            </div>
+            <div id="nfcWriteStatus" style="display:none"></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn-ghost" onclick="closeNfcWriteModal()">Cancelar</button>
+                <button class="btn-primary" id="nfcSaveOnlyBtn" onclick="saveNfcTagOnly()">💾 Guardar</button>
+                <button class="btn-primary" id="nfcWriteBtn" onclick="saveAndWriteNfc()" style="background:var(--orange)">📡 Gravar em Tag</button>
             </div>
         </div>
     </div>

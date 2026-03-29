@@ -667,3 +667,86 @@ input[type="number"] { text-align: center; }
     .tray-sidebar { width: 260px !important; }
 }
 
+
+/* ── NFC MODULE ───────────────────────── */
+
+.nfc-banner {
+    padding: 11px 16px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 18px;
+    border: 1px solid transparent;
+}
+
+.nfc-banner-ok {
+    background: var(--green-bg);
+    border-color: var(--green);
+    color: var(--green);
+}
+
+.nfc-banner-warn {
+    background: var(--orange-bg);
+    border-color: var(--orange);
+    color: var(--orange);
+}
+
+.nfc-banner-scanning {
+    background: var(--orange-bg);
+    border-color: var(--orange);
+    color: var(--orange);
+    animation: nfcPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes nfcPulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+}
+
+.nfc-scan-pulse {
+    text-align: center;
+    padding: 32px 20px;
+    background: var(--orange-bg);
+    border: 1.5px dashed var(--orange);
+    border-radius: 16px;
+    margin-bottom: 20px;
+    color: var(--text);
+    animation: nfcPulse 1.4s ease-in-out infinite;
+}
+
+.nfc-tag-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow-card);
+    margin-bottom: 12px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.nfc-tag-card:hover {
+    border-color: var(--green-bright);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+.nfc-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.nfc-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.nfc-detail-item .field-label {
+    margin-bottom: 0;
+}
