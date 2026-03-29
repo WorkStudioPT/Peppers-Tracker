@@ -54,20 +54,19 @@ _supabase.auth.onAuthStateChange((event, session) => {
         loadFromSupabase();
         document.getElementById('startDate').valueAsDate = new Date();
         tInit();
-        nfcInit().then(() => {
-            // Check if app was opened via NFC tag tap (URL has ?nfc_id=X)
-            const urlParams = new URLSearchParams(window.location.search);
-            const nfcId     = urlParams.get('nfc_id');
-            if (nfcId) {
-                // Clean the URL without reloading
-                window.history.replaceState({}, '', window.location.pathname);
-                // Switch to NFC tab and show tag info
-                switchTab('nfc').then(() => {
-                    const tag = nfcTags.find(t => t.id == nfcId);
-                    nfcShowResultModal(tag, tag ? null : { raw: 'ID: ' + nfcId }, null);
-                });
-            }
-        });
+
+        // NFC: load in background, don't block app startup
+        const urlParams = new URLSearchParams(window.location.search);
+        const nfcId     = urlParams.get('nfc_id');
+        if (nfcId) {
+            window.history.replaceState({}, '', window.location.pathname);
+            nfcLoadTags().then(() => {
+                switchTab('nfc');
+                const tag = nfcTags.find(t => t.id == nfcId);
+                nfcShowResultModal(tag, tag ? null : { raw: 'ID: ' + nfcId }, null);
+            });
+        }
+        // nfcTags are loaded on demand when tab is clicked — no eager load needed
     } else {
         currentUserId = null;
         document.getElementById('authOverlay').classList.remove('hidden');
