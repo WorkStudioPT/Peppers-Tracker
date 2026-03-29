@@ -1288,7 +1288,6 @@ function nfcShowResultModal(tag, tagData, serial) {
             <div class="nfc-detail-grid">
                 <div class="nfc-detail-item"><span class="field-label">Data Plantação</span><span>${dateStr}</span></div>
                 ${tag.notes ? `<div class="nfc-detail-item" style="grid-column:1/-1"><span class="field-label">Notas</span><span>${tag.notes}</span></div>` : ''}
-                ${serial ? `<div class="nfc-detail-item"><span class="field-label">Serial NFC</span><span style="font-family:'DM Mono',monospace;font-size:10px">${serial}</span></div>` : ''}
             </div>`;
         document.getElementById('nfcResultEditBtn').style.display = '';
     } else if (tagData?.raw) {
@@ -1296,7 +1295,7 @@ function nfcShowResultModal(tag, tagData, serial) {
                 <div style="margin-top:12px;font-size:12px;color:var(--text-faint)">Esta tag não está registada no Garden. Cria uma nova tag com este conteúdo.</div>`;
         document.getElementById('nfcResultEditBtn').style.display = 'none';
     } else {
-        html = `<div style="font-size:13px;color:var(--text-muted);padding:12px 0">Tag lida mas sem dados reconhecidos.<br><span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-faint)">${serial || ''}</span></div>`;
+        html = `<div style="font-size:13px;color:var(--text-muted);padding:12px 0">Tag lida mas sem dados reconhecidos.</div>`;
         document.getElementById('nfcResultEditBtn').style.display = 'none';
     }
 
