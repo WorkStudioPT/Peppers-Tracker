@@ -54,7 +54,20 @@ _supabase.auth.onAuthStateChange((event, session) => {
         loadFromSupabase();
         document.getElementById('startDate').valueAsDate = new Date();
         tInit();
-        nfcInit();
+        nfcInit().then(() => {
+            // Check if app was opened via NFC tag tap (URL has ?nfc_id=X)
+            const urlParams = new URLSearchParams(window.location.search);
+            const nfcId     = urlParams.get('nfc_id');
+            if (nfcId) {
+                // Clean the URL without reloading
+                window.history.replaceState({}, '', window.location.pathname);
+                // Switch to NFC tab and show tag info
+                switchTab('nfc').then(() => {
+                    const tag = nfcTags.find(t => t.id == nfcId);
+                    nfcShowResultModal(tag, tag ? null : { raw: 'ID: ' + nfcId }, null);
+                });
+            }
+        });
     } else {
         currentUserId = null;
         document.getElementById('authOverlay').classList.remove('hidden');
@@ -1201,27 +1214,46 @@ function nfcUpdateBanner(state) {
 function nfcHandleRead(message, serialNumber) {
     nfcStopScan();
 
-    // Try to decode NDEF text record
     let tagData = null;
     for (const record of message.records) {
         if (record.recordType === 'text') {
-            const decoder = new TextDecoder(record.encoding || 'utf-8');
-            const text    = decoder.decode(record.data);
-            try { tagData = JSON.parse(text); } catch { tagData = { raw: text }; }
+            // NDEF text records: first byte = status (encoding + lang length), then lang, then text
+            try {
+                const bytes      = new Uint8Array(record.data.buffer);
+                const statusByte = bytes[0];
+                const langLen    = statusByte & 0x3F;
+                const isUTF16    = !!(statusByte & 0x80);
+                const encoding   = isUTF16 ? 'utf-16' : 'utf-8';
+                const textBytes  = bytes.slice(1 + langLen);
+                const text       = new TextDecoder(encoding).decode(textBytes);
+                try { tagData = JSON.parse(text); } catch { tagData = { raw: text }; }
+            } catch {
+                // Fallback: try decoding the whole buffer
+                try {
+                    const text = new TextDecoder('utf-8').decode(record.data);
+                    try { tagData = JSON.parse(text); } catch { tagData = { raw: text }; }
+                } catch { tagData = { raw: '(erro ao ler)' }; }
+            }
             break;
         }
         if (record.recordType === 'url') {
-            const decoder = new TextDecoder();
-            tagData = { url: decoder.decode(record.data) };
+            try {
+                const text = new TextDecoder('utf-8').decode(record.data);
+                // Extract nfc_id from URL if present
+                const url = new URL(text.startsWith('http') ? text : 'https://' + text);
+                const id  = url.searchParams.get('nfc_id');
+                tagData   = id ? { nfc_id: parseInt(id) } : { url: text };
+            } catch { tagData = { raw: 'URL inválido' }; }
             break;
         }
     }
 
-    // Try to match with a stored tag by serial or data
+    // Match by nfc_id (loose equality to handle string/number mismatch)
     let matchedTag = null;
-    if (tagData?.nfc_id) {
-        matchedTag = nfcTags.find(t => t.nfc_id === tagData.nfc_id);
+    if (tagData?.nfc_id != null) {
+        matchedTag = nfcTags.find(t => t.id == tagData.nfc_id);
     }
+    // Fallback: match by serial
     if (!matchedTag && serialNumber) {
         matchedTag = nfcTags.find(t => t.serial === serialNumber);
     }
@@ -1336,7 +1368,7 @@ async function saveAndWriteNfc() {
     if (!data.label && !data.variety) return alert('Preenche pelo menos o nome ou a variedade.');
 
     // Save to DB first
-    let savedId = editId;
+    let savedId = editId ? parseInt(editId) : null;
     if (editId) {
         await _supabase.from('nfc_tags').update(data).eq('id', editId);
     } else {
@@ -1348,14 +1380,19 @@ async function saveAndWriteNfc() {
         savedId = inserted?.id;
     }
 
-    // Now write to physical tag
+    if (!savedId) return nfcShowWriteStatus('❌ Erro ao guardar no servidor.', 'error');
+
+    // Build URL that opens the app and shows the tag
+    // Uses current page URL + ?nfc_id=X so Android opens browser → app handles it
+    const appUrl = window.location.origin + window.location.pathname + '?nfc_id=' + savedId;
+
     nfcShowWriteStatus('⏳ Aproxima o telemóvel da tag NFC…', 'info');
     try {
-        const ndef    = new NDEFReader();
-        const payload = JSON.stringify({ nfc_id: savedId, label: data.label, variety: data.variety, plant_date: data.plant_date, location: data.location });
-        await ndef.write({ records: [{ recordType: 'text', data: payload }] });
+        const ndef = new NDEFReader();
+        await ndef.write({
+            records: [{ recordType: 'url', data: appUrl }]
+        });
         nfcShowWriteStatus('✅ Tag gravada com sucesso!', 'ok');
-        // Also store serial if available
         await nfcLoadTags();
         setTimeout(() => { closeNfcWriteModal(); nfcRender(); }, 1200);
     } catch (err) {
@@ -1376,13 +1413,13 @@ async function nfcWriteTag(tagId) {
     const tag = nfcTags.find(t => t.id === tagId);
     if (!tag) return;
 
+    const appUrl = window.location.origin + window.location.pathname + '?nfc_id=' + tag.id;
     const status = document.getElementById('nfcStatusBanner');
     if (status) { status.className = 'nfc-banner nfc-banner-scanning'; status.innerHTML = '📡 Aproxima o telemóvel da tag NFC para gravar…'; }
 
     try {
-        const ndef    = new NDEFReader();
-        const payload = JSON.stringify({ nfc_id: tag.id, label: tag.label, variety: tag.variety, plant_date: tag.plant_date, location: tag.location });
-        await ndef.write({ records: [{ recordType: 'text', data: payload }] });
+        const ndef = new NDEFReader();
+        await ndef.write({ records: [{ recordType: 'url', data: appUrl }] });
         if (status) { status.className = 'nfc-banner nfc-banner-ok'; status.innerHTML = `✅ Tag "${tag.label}" gravada com sucesso!`; }
         setTimeout(() => { if (status) { status.className = 'nfc-banner nfc-banner-ok'; status.innerHTML = '✅ Web NFC disponível.'; } }, 3000);
     } catch (err) {
