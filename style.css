@@ -278,6 +278,8 @@ input[type="number"] { text-align: center; }
     padding: 18px;
     box-shadow: var(--shadow-card);
     margin-bottom: 15px;
+    position: relative;
+    z-index: 0;
 }
 
 .plant-card.archived { opacity: 0.55; filter: grayscale(0.6); }
@@ -378,6 +380,8 @@ input[type="number"] { text-align: center; }
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
     border-bottom-color: transparent;
+    position: relative;
+    z-index: 1;
 }
 
 .collapsible-arrow {
@@ -614,8 +618,18 @@ input[type="number"] { text-align: center; }
     .app-wrap { padding: 0 12px; }
     .user-badge { max-width: 150px;}
     .app-logo { font-size: 15px; }
-    .tabs { margin: 14px 0; }
-    .tab-btn { font-size: 11px; padding: 9px 6px; }
+    .tabs {
+        margin: 14px 0;
+    }
+    .tab-btn {
+        font-size: 10px;
+        padding: 8px 4px;
+        flex: 1;
+        white-space: nowrap;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     .card { padding: 16px; }
     .form-grid-3 { grid-template-columns: 1fr 1fr; gap: 8px; }
     .form-grid-3 > :first-child { grid-column: 1 / -1; }
