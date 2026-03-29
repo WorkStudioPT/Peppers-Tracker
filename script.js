@@ -50,23 +50,25 @@ _supabase.auth.onAuthStateChange((event, session) => {
         document.getElementById('authOverlay').classList.add('hidden');
         document.getElementById('appContent').style.display = '';
         document.getElementById('userEmailLabel').innerText = session.user.email;
-        loadCatalog();
-        loadFromSupabase();
         document.getElementById('startDate').valueAsDate = new Date();
-        tInit();
+        loadCatalog();
 
-        // NFC: load in background, don't block app startup
+        // Run all 3 data sources in parallel instead of sequentially
         const urlParams = new URLSearchParams(window.location.search);
         const nfcId     = urlParams.get('nfc_id');
-        if (nfcId) {
-            window.history.replaceState({}, '', window.location.pathname);
-            nfcLoadTags().then(() => {
+        if (nfcId) window.history.replaceState({}, '', window.location.pathname);
+
+        Promise.all([
+            loadFromSupabase(),
+            tInit(),
+            nfcLoadTags()   // prefetch NFC in background — ready instantly when tab is clicked
+        ]).then(() => {
+            if (nfcId) {
                 switchTab('nfc');
                 const tag = nfcTags.find(t => t.id == nfcId);
                 nfcShowResultModal(tag, tag ? null : { raw: 'ID: ' + nfcId }, null);
-            });
-        }
-        // nfcTags are loaded on demand when tab is clicked — no eager load needed
+            }
+        });
     } else {
         currentUserId = null;
         document.getElementById('authOverlay').classList.remove('hidden');
@@ -143,7 +145,10 @@ async function switchTab(tab) {
         document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
     if (tab === 'tray') { tRenderSeeds(); tRenderTrays(); }
-    if (tab === 'nfc')  { nfcRenderLoading(); await nfcLoadTags(); nfcRender(); }
+    if (tab === 'nfc') {
+        if (nfcTags.length === 0) { nfcRenderLoading(); await nfcLoadTags(); }
+        nfcRender();
+    }
 }
 
 // ════════════════════════════════════════════════════════
@@ -609,8 +614,8 @@ async function tInit() {
     tRenderColorRow();
     tRenderSeeds();
     tRenderTrays();
-    await tLoadSeeds();
-    await tLoadTrays();
+    // Load seeds and trays in parallel
+    const [seedsResult] = await Promise.all([tLoadSeeds(), tLoadTrays()]);
     if (tState.seeds.length === 0) await tDefaultSeeds();
 }
 
