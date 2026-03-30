@@ -11,21 +11,91 @@ const SUPABASE_URL = 'https://bjvjojpjhyujhyatrxlz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_dvUvVnNBD2yKxKS_Y30b2w_KDozTYOE';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Catálogo partilhado entre o Pepper Tracker e os Tabuleiros
-const CATALOGO = [
-    { nome: "Tomate",                img: "imagens/tomate.webp" },
-    { nome: "Tomate Cherry",         img: "imagens/tomate.webp" },
-    { nome: "Tomate Coração de Boi", img: "imagens/tomate.webp" },
-    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp" },
-    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp" },
-    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp" },
-    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp" },
-    { nome: "Jalapeño",              img: "imagens/jalapeno.webp" },
-    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp" },
-    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp" },
-    { nome: "Ghost Pepper",          img: "imagens/default.webp" },
-    { nome: "Serrano",               img: "imagens/default.webp" },
+// Catálogo base (hardcoded) + entradas personalizadas do Supabase
+let CATALOGO = [
+    // SHU 0: Não picantes
+    { nome: "Tomate",                img: "imagens/tomate.webp"},
+    { nome: "Tomate Cherry",         img: "imagens/tomate_cherry.webp"},
+    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp"},
+    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp"},
+    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp"},
+    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp"},
+
+    // SHU 2.500 - 10.000: Moderadas
+    { nome: "Jalapeño",              img: "imagens/jalapeno.webp"},
+    { nome: "Serrano",               img: "imagens/default.webp"},
+
+    // SHU 100.000 - 350.000: Fortes
+    { nome: "Tangerine Tiger",       img: "imagens/default.webp"},
+    { nome: "Puma",                  img: "imagens/default.webp"},
+    { nome: "Habanero Laranja",      img: "imagens/default.webp"},
+    { nome: "Habanero Yellow",       img: "imagens/default.webp"},
+    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp"},
+    { nome: "Habanero Caramel",      img: "imagens/default.webp"},
+
+    // SHU 1.000.000+: Nucleares
+    { nome: "Ghost Pepper",          img: "imagens/default.webp"},
+    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp"},
 ];
+
+const CATALOGO_BASE_COUNT = CATALOGO.length;
+
+let catalogCustom = []; // entries from Supabase
+
+async function loadCatalogCustom() {
+    const { data, error } = await _supabase
+        .from('catalog_entries')
+        .select('*')
+        .order('id', { ascending: true });
+    if (error) return;
+    catalogCustom = data || [];
+    // Merge: rebuild CATALOGO = base + custom
+    CATALOGO = [
+        ...CATALOGO.slice(0, CATALOGO_BASE_COUNT),
+        ...catalogCustom.map(e => ({ nome: e.nome, img: e.img, id: e.id, custom: true }))
+    ];
+    loadCatalog();
+    nfcPopulateCatalog();
+    tRenderCatalogPicker();
+}
+
+async function catalogAddEntry() {
+    const nome = document.getElementById('catalogNewName').value.trim();
+    const img  = document.getElementById('catalogNewImg').value.trim() || IMG_DEFAULT;
+    if (!nome) return alert('Indica o nome da variedade.');
+    const { data, error } = await _supabase
+        .from('catalog_entries')
+        .insert([{ user_id: currentUserId, nome, img }])
+        .select().single();
+    if (error) return alert('Erro ao adicionar: ' + error.message);
+    document.getElementById('catalogNewName').value = '';
+    document.getElementById('catalogNewImg').value  = '';
+    await loadCatalogCustom();
+    renderCatalogManager();
+}
+
+async function catalogDeleteEntry(id) {
+    if (!confirm('Remover esta variedade do catálogo?')) return;
+    await _supabase.from('catalog_entries').delete().eq('id', id);
+    await loadCatalogCustom();
+    renderCatalogManager();
+}
+
+function renderCatalogManager() {
+    const el = document.getElementById('catalogManagerList');
+    if (!el) return;
+    if (catalogCustom.length === 0) {
+        el.innerHTML = `<div style="font-size:11px;color:var(--text-faint);text-align:center;padding:8px 0">Sem variedades personalizadas</div>`;
+        return;
+    }
+    el.innerHTML = catalogCustom.map(e => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <img src="${e.img}" onerror="this.src='${IMG_DEFAULT}'" style="width:24px;height:24px;object-fit:contain;border-radius:4px;flex-shrink:0">
+            <span style="flex:1;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.nome}</span>
+            <button onclick="catalogDeleteEntry(${e.id})"
+                style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red);font-weight:700;flex-shrink:0">✕</button>
+        </div>`).join('');
+}
 
 const IMG_DEFAULT = "imagens/default.webp";
 
@@ -61,7 +131,8 @@ _supabase.auth.onAuthStateChange((event, session) => {
         Promise.all([
             loadFromSupabase(),
             tInit(),
-            nfcLoadTags()   // prefetch NFC in background — ready instantly when tab is clicked
+            nfcLoadTags(),
+            loadCatalogCustom()
         ]).then(() => {
             if (nfcId) {
                 switchTab('nfc');
@@ -445,9 +516,9 @@ function render() {
         const card = `
             <details class="collapsible-section" ${isFirst ? 'open' : ''}>
                 <summary class="collapsible-header">
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <span class="badge badge-muted">${p.startDate}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-start;">
                         <span style="font-family:'Lora',serif;font-size:14px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0">${p.variety}</span>
+                        <span class="badge badge-muted badge-tracker">${p.startDate}</span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
                         <span class="badge ${stageColor}">${p.stage}</span>
@@ -824,7 +895,6 @@ function tRenderTrays() {
                             onerror="this.src='${IMG_DEFAULT}'"
                             class="cell-img">
                         <span class="cell-label" style="color:${s.color}">${s.name}</span>
-                        ${cell.date ? `<span style="font-size:8px;color:var(--text-faint);position:absolute;bottom:3px;left:0;right:0;text-align:center">${cell.date.slice(5)}</span>` : ''}
                     </div>`;
             }
             return tEmptyCell(tray.id, ri, ci, colW, pos);
