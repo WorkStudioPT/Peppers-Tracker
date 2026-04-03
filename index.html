@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌱 Garden</title>
+    <title>Garden</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=3">
+    <link rel="icon" href="imagens/icon.svg" type="image/svg+xml">
 </head>
 <body>
 
@@ -15,7 +16,9 @@
     <button class="btn-icon" onclick="toggleDark()" title="Modo escuro" id="authDarkToggleBtn" style="position:absolute;top:16px;right:16px">🌙</button>
     <div class="auth-box">
         <div style="text-align:center;margin-bottom:28px">
-            <div style="font-size:40px;margin-bottom:10px">🌱</div>
+            <div style="margin-bottom:10px;justify-items: center;">
+                <img src="imagens/icon.svg" alt="Ícone de Plantação" style="width:40px; height:40px; display:block;">
+            </div>
             <div style="font-family:'Lora',serif;font-size:22px;font-weight:700;color:var(--text)">Garden</div>
             <div id="authSubtitle" style="font-size:11px;color:var(--text-muted);margin-top:4px;letter-spacing:0.5px">Bem-vindo de volta</div>
         </div>
@@ -60,9 +63,10 @@
 
         <!-- TABS -->
         <div class="tabs">
-            <button class="tab-btn active" id="tab-tracker" onclick="switchTab('tracker')">🌶️ Tracker</button>
-            <button class="tab-btn"        id="tab-tray"    onclick="switchTab('tray')">🌿 Tabuleiros</button>
-            <button class="tab-btn"        id="tab-nfc"     onclick="switchTab('nfc')">📡 NFC</button>
+            <button class="tab-btn active" id="tab-tracker"  onclick="switchTab('tracker')">🌶️ Tracker</button>
+            <button class="tab-btn"        id="tab-tray"     onclick="switchTab('tray')">🌿 Tabuleiros</button>
+            <button class="tab-btn"        id="tab-catalogo" onclick="switchTab('catalogo')">📚 Catálogo</button>
+            <button class="tab-btn"        id="tab-nfc"      onclick="switchTab('nfc')">📡 NFC</button>
         </div>
 
         <!-- TAB: PEPPER TRACKER -->
@@ -158,33 +162,11 @@
                                     <div class="field-label" style="margin-bottom:5px">Cor</div>
                                     <div style="display:flex;gap:5px;flex-wrap:wrap" id="tColorRow"></div>
                                 </div>
-                                <button class="btn-primary" style="font-size:12px;padding:10px" onclick="tAddSeed()">+ Adicionar</button>
+                                <button id="tSeedAddBtn" class="btn-primary" style="font-size:12px;padding:10px" onclick="tAddSeed()">+ Adicionar</button>
                             </div>
                         </div>
                     </details>
-                    <details class="collapsible-section" style="margin-top:8px" id="catalogManagerSection">
-                        <summary class="collapsible-header" onclick="renderCatalogManager()">
-                            <span>Gerir Catálogo</span>
-                            <span class="collapsible-arrow">▾</span>
-                        </summary>
-                        <div class="card" style="padding:16px;margin-top:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none">
-                            <div class="space-y">
-                                <div>
-                                    <label class="field-label">Nome da variedade</label>
-                                    <input type="text" id="catalogNewName" placeholder="Ex: Pepperoncini" style="font-size:13px">
-                                </div>
-                                <div>
-                                    <label class="field-label">URL da imagem (opcional)</label>
-                                    <input type="text" id="catalogNewImg" placeholder="imagens/..." style="font-size:13px">
-                                </div>
-                                <button class="btn-primary" style="font-size:12px;padding:10px" onclick="catalogAddEntry()">+ Adicionar</button>
-                                <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
-                                    <div class="field-label" style="margin-bottom:8px">Personalizadas</div>
-                                    <div id="catalogManagerList"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
+                    <button class="btn-ghost" style="width:100%;margin-top:8px;font-size:11px;padding:9px" onclick="switchTab('catalogo')">📚 Ver Catálogo</button>
                 </div>
 
                 <!-- TRAYS -->
@@ -199,6 +181,29 @@
                 </div>
 
             </div>
+        </div>
+
+        <!-- TAB: CATÁLOGO -->
+        <div id="panel-catalogo" style="display:none" class="fade-in">
+            <!-- Header + Add form -->
+            <div class="catalog-header-row">
+                <div>
+                    <div style="font-family:'Lora',serif;font-size:20px;font-weight:700">Catálogo de Plantas</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Explora variedades e gere o teu catálogo personalizado</div>
+                </div>
+                <button class="btn-primary" onclick="openAddCatalogModal()" style="white-space:nowrap;padding:10px 18px;font-size:12px">+ Nova Variedade</button>
+            </div>
+
+            <!-- Category filter pills -->
+            <div class="catalog-cats" id="catalogCatPills"></div>
+
+            <!-- Search -->
+            <div style="margin-bottom:16px;position:relative">
+                <input type="text" id="catalogSearch" placeholder="🔍  Pesquisar variedade..." style="padding-left:16px;font-size:13px" oninput="catalogFilterRender()">
+            </div>
+
+            <!-- Grid -->
+            <div id="catalogGrid"></div>
         </div>
 
         <!-- TAB: NFC -->
@@ -356,6 +361,143 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- MODAL: Catalog detail -->
+<div class="modal-overlay" id="catalogDetailModal">
+    <div class="modal-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
+            <div style="width:72px;height:72px;border-radius:12px;background:var(--bg-subtle);border:1px solid var(--border);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                <img id="cdImg" style="width:100%;height:100%;object-fit:contain" onerror="this.src='imagens/default.webp'">
+            </div>
+            <div style="flex:1">
+                <div id="cdName" style="font-family:'Lora',serif;font-size:20px;font-weight:700"></div>
+                <div id="cdCatBadge" style="margin-top:5px"></div>
+            </div>
+        </div>
+        <div id="cdShu" style="display:none;margin-bottom:14px"></div>
+        <div id="cdDesc" style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6"></div>
+        <!-- Timeline info grid -->
+        <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--text-faint);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">Calendário & Crescimento</div>
+        <div class="catalog-info-grid" id="cdInfoGrid"></div>
+        <div id="cdExtraInfo" style="margin-top:14px"></div>
+        <div style="display:flex;gap:8px;margin-top:20px">
+            <button class="btn-ghost" onclick="closeCatalogDetailModal()">Fechar</button>
+            <button class="btn-ghost" id="cdEditBtn" onclick="openEditCatalogFromDetail()" style="color:var(--green);border-color:var(--green)">✏️ Editar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Add/Edit catalog entry -->
+<div class="modal-overlay" id="catalogAddModal">
+    <div class="modal-box" style="max-width:500px;max-height:90vh;overflow-y:auto">
+        <div class="modal-title" id="catalogAddModalTitle">Nova Variedade</div>
+        <input type="hidden" id="catalogEditId">
+        <div class="space-y">
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Nome</label>
+                    <input type="text" id="camName" placeholder="Ex: Manjericão">
+                </div>
+                <div>
+                    <label class="field-label">Categoria</label>
+                    <select id="camCat" style="height:44px;padding-left:10px">
+                        <option value="Ervas Aromáticas">🌿 Ervas Aromáticas</option>
+                        <option value="Picantes">🌶️ Picantes</option>
+                        <option value="Legumes">🥦 Legumes</option>
+                        <option value="Frutos">🍅 Frutos</option>
+                        <option value="Tubérculos">🥕 Tubérculos</option>
+                        <option value="Flores">🌸 Flores</option>
+                        <option value="Outro">📦 Outro</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="field-label">Descrição (opcional)</label>
+                <textarea id="camDesc" rows="2" placeholder="Notas sobre a variedade..." style="height:auto;resize:none;font-size:13px;padding:8px 12px"></textarea>
+            </div>
+            <div>
+                <label class="field-label">URL da Imagem (opcional)</label>
+                <input type="text" id="camImg" placeholder="imagens/manjericao.webp ou URL externo">
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--text-faint);padding-bottom:6px;border-bottom:1px solid var(--border)">Calendário (meses do ano: 1=Jan … 12=Dez)</div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Semear (interior)</label>
+                    <input type="text" id="camSowIn" placeholder="Ex: 2-4">
+                </div>
+                <div>
+                    <label class="field-label">Semear (exterior)</label>
+                    <input type="text" id="camSowOut" placeholder="Ex: 4-6">
+                </div>
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Plantar / Transplantar</label>
+                    <input type="text" id="camPlant" placeholder="Ex: 4-6">
+                </div>
+                <div>
+                    <label class="field-label">Colher</label>
+                    <input type="text" id="camHarvest" placeholder="Ex: 7-10">
+                </div>
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--text-faint);padding-bottom:6px;border-bottom:1px solid var(--border)">Dados de Crescimento</div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Germinação (dias)</label>
+                    <input type="text" id="camGermDays" placeholder="Ex: 7-14">
+                </div>
+                <div>
+                    <label class="field-label">Dias até Colheita</label>
+                    <input type="text" id="camDaysToHarvest" placeholder="Ex: 60-80">
+                </div>
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Espaçamento (cm)</label>
+                    <input type="text" id="camSpacing" placeholder="Ex: 30-40">
+                </div>
+                <div>
+                    <label class="field-label">Altura da planta (cm)</label>
+                    <input type="text" id="camHeight" placeholder="Ex: 60-120">
+                </div>
+            </div>
+            <div class="form-grid-2">
+                <div>
+                    <label class="field-label">Exposição solar</label>
+                    <select id="camSun" style="height:44px;padding-left:10px">
+                        <option value="">— Selecionar —</option>
+                        <option value="Sol pleno">☀️ Sol pleno</option>
+                        <option value="Meia-sombra">⛅ Meia-sombra</option>
+                        <option value="Sombra">🌫️ Sombra</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label">Rega</label>
+                    <select id="camWater" style="height:44px;padding-left:10px">
+                        <option value="">— Selecionar —</option>
+                        <option value="Baixa">💧 Baixa</option>
+                        <option value="Moderada">💧💧 Moderada</option>
+                        <option value="Alta">💧💧💧 Alta</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="field-label">SHU (Scoville) — apenas picantes</label>
+                <input type="number" id="camShu" placeholder="Ex: 5000" style="text-align:left">
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn-ghost" onclick="closeCatalogAddModal()">Cancelar</button>
+                <button class="btn-primary" onclick="saveCatalogEntry()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden legacy catalog compat elements -->
+<div style="display:none">
+    <input id="catalogNewName"><input id="catalogNewImg">
+    <div id="catalogManagerList"></div>
 </div>
 
 <!-- SCRIPTS -->

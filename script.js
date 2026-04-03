@@ -11,31 +11,31 @@ const SUPABASE_URL = 'https://bjvjojpjhyujhyatrxlz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_dvUvVnNBD2yKxKS_Y30b2w_KDozTYOE';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Catálogo base (hardcoded) + entradas personalizadas do Supabase
+// Catálogo ordenado por SHU (Scoville Heat Units)
 let CATALOGO = [
     // SHU 0: Não picantes
-    { nome: "Tomate",                img: "imagens/tomate.webp"},
-    { nome: "Tomate Cherry",         img: "imagens/tomate_cherry.webp"},
-    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp"},
-    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp"},
-    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp"},
-    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp"},
+    { nome: "Tomate",                img: "imagens/tomate.webp",           shu: 0 },
+    { nome: "Tomate Cherry",         img: "imagens/tomate_cherry.webp",    shu: 0 },
+    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp", shu: 0 },
+    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp",  shu: 0 },
+    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp",  shu: 0 },
+    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp",    shu: 0 },
 
     // SHU 2.500 - 10.000: Moderadas
-    { nome: "Jalapeño",              img: "imagens/jalapeno.webp"},
-    { nome: "Serrano",               img: "imagens/default.webp"},
+    { nome: "Jalapeño",              img: "imagens/jalapeno.webp",         shu: 5000 },
+    { nome: "Serrano",               img: "imagens/default.webp",          shu: 15000 },
 
     // SHU 100.000 - 350.000: Fortes
-    { nome: "Tangerine Tiger",       img: "imagens/default.webp"},
-    { nome: "Puma",                  img: "imagens/default.webp"},
-    { nome: "Habanero Laranja",      img: "imagens/default.webp"},
-    { nome: "Habanero Yellow",       img: "imagens/default.webp"},
-    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp"},
-    { nome: "Habanero Caramel",      img: "imagens/default.webp"},
+    { nome: "Tangerine Tiger",       img: "imagens/default.webp",          shu: 100000 },
+    { nome: "Puma",                  img: "imagens/default.webp",          shu: 300000 },
+    { nome: "Habanero Laranja",      img: "imagens/default.webp",          shu: 325000 },
+    { nome: "Habanero Yellow",       img: "imagens/default.webp",          shu: 325000 },
+    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp", shu: 350000 },
+    { nome: "Habanero Caramel",      img: "imagens/default.webp",          shu: 350000 },
 
     // SHU 1.000.000+: Nucleares
-    { nome: "Ghost Pepper",          img: "imagens/default.webp"},
-    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp"},
+    { nome: "Ghost Pepper",          img: "imagens/default.webp",          shu: 1041427 },
+    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp",  shu: 2200000 },
 ];
 
 const CATALOGO_BASE_COUNT = CATALOGO.length;
@@ -49,10 +49,10 @@ async function loadCatalogCustom() {
         .order('id', { ascending: true });
     if (error) return;
     catalogCustom = data || [];
-    // Merge: rebuild CATALOGO = base + custom
+    // Merge: rebuild CATALOGO = base + custom (for tracker datalist and tray picker)
     CATALOGO = [
         ...CATALOGO.slice(0, CATALOGO_BASE_COUNT),
-        ...catalogCustom.map(e => ({ nome: e.nome, img: e.img, id: e.id, custom: true }))
+        ...catalogCustom.map(e => ({ nome: e.nome, img: e.img || IMG_DEFAULT, id: e.id, custom: true }))
     ];
     loadCatalog();
     nfcPopulateCatalog();
@@ -110,6 +110,9 @@ let plants = [];
 let isSignUpMode = false;
 let currentUserId = null;
 
+// ── TRACKER SORT STATE ─────────────────────────────────
+let _plantSortState = null;
+
 // ════════════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════════════
@@ -128,12 +131,12 @@ _supabase.auth.onAuthStateChange((event, session) => {
         const nfcId     = urlParams.get('nfc_id');
         if (nfcId) window.history.replaceState({}, '', window.location.pathname);
 
-        Promise.all([
+        // loadCatalogCustom MUST run first — tInit depends on CATALOGO being populated
+        loadCatalogCustom().then(() => Promise.all([
             loadFromSupabase(),
             tInit(),
             nfcLoadTags(),
-            loadCatalogCustom()
-        ]).then(() => {
+        ])).then(() => {
             if (nfcId) {
                 switchTab('nfc');
                 const tag = nfcTags.find(t => t.id == nfcId);
@@ -211,11 +214,12 @@ function toggleDark() {
 // ════════════════════════════════════════════════════════
 
 async function switchTab(tab) {
-    ['tracker', 'tray', 'nfc'].forEach(t => {
+    ['tracker', 'tray', 'catalogo', 'nfc'].forEach(t => {
         document.getElementById(`panel-${t}`).style.display = t === tab ? '' : 'none';
         document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
     if (tab === 'tray') { tRenderSeeds(); tRenderTrays(); }
+    if (tab === 'catalogo') { catalogTabInit(); }
     if (tab === 'nfc') {
         if (nfcTags.length === 0) { nfcRenderLoading(); await nfcLoadTags(); }
         nfcRender();
@@ -227,8 +231,101 @@ async function switchTab(tab) {
 // ════════════════════════════════════════════════════════
 
 async function loadFromSupabase() {
-    const { data, error } = await _supabase.from('plants').select('*').order('id', { ascending: false });
+    const { data, error } = await _supabase
+        .from('plants')
+        .select('*')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: false });
     if (!error) { plants = data; render(); }
+}
+
+async function savePlantOrder() {
+    const updates = plants.map((p, i) =>
+        _supabase.from('plants').update({ sort_order: i }).eq('id', p.id)
+    );
+    await Promise.all(updates);
+}
+
+function plantDragStart(e, plantId) {
+    e.stopPropagation();
+    e.preventDefault();
+    const container = document.getElementById('plantList');
+    const srcEl = e.currentTarget.closest('.plant-sortable');
+    if (!srcEl) return;
+
+    const ghost = srcEl.cloneNode(true);
+    ghost.style.cssText = `
+        position:fixed; z-index:9000; pointer-events:none; opacity:0.88;
+        width:${srcEl.offsetWidth}px; border-radius:12px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.28); transition:none;
+        background:var(--bg-card); border:2px solid var(--green);
+    `;
+    document.body.appendChild(ghost);
+    const rect = srcEl.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top  = rect.top  + 'px';
+    srcEl.style.opacity = '0.35';
+    srcEl.style.pointerEvents = 'none';
+    _plantSortState = { plantId, srcEl, ghost, offsetY, container };
+    document.addEventListener('pointermove', _plantSortMove, { passive: false });
+    document.addEventListener('pointerup',   _plantSortEnd,  { once: true });
+}
+
+function _plantSortMove(e) {
+    e.preventDefault();
+    if (!_plantSortState) return;
+    const { ghost, offsetY, container, srcEl } = _plantSortState;
+    const y = e.clientY;
+    ghost.style.top = (y - offsetY) + 'px';
+    const items = [...container.querySelectorAll('.plant-sortable')].filter(el => el !== srcEl);
+    let target = null, insertBefore = true;
+    for (const el of items) {
+        const r = el.getBoundingClientRect();
+        if (y >= r.top && y <= r.bottom) {
+            target = el; insertBefore = y < r.top + r.height / 2; break;
+        }
+    }
+    container.querySelectorAll('.plant-drop-line').forEach(l => l.remove());
+    if (target) {
+        const line = document.createElement('div');
+        line.className = 'plant-drop-line';
+        line.style.cssText = 'height:3px;background:var(--green);border-radius:2px;margin:2px 0;transition:none';
+        if (insertBefore) target.before(line);
+        else target.after(line);
+        _plantSortState.target = target;
+        _plantSortState.insertBefore = insertBefore;
+    } else {
+        _plantSortState.target = null;
+    }
+}
+
+async function _plantSortEnd(e) {
+    document.removeEventListener('pointermove', _plantSortMove);
+    if (!_plantSortState) return;
+    const { plantId, srcEl, ghost, container, target, insertBefore } = _plantSortState;
+    _plantSortState = null;
+    ghost.remove();
+    container.querySelectorAll('.plant-drop-line').forEach(l => l.remove());
+    srcEl.style.opacity = '';
+    srcEl.style.pointerEvents = '';
+    if (!target) return;
+
+    // Only reorder active (non-archived) plants
+    const activePlants  = plants.filter(p => !p.archived);
+    const archivedPlants = plants.filter(p => p.archived);
+    const fromIdx = activePlants.findIndex(p => p.id === plantId);
+    const toId    = parseInt(target.dataset.plantId);
+    let   toIdx   = activePlants.findIndex(p => p.id === toId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    const [moved] = activePlants.splice(fromIdx, 1);
+    toIdx = activePlants.findIndex(p => p.id === toId);
+    if (insertBefore) activePlants.splice(toIdx, 0, moved);
+    else              activePlants.splice(toIdx + 1, 0, moved);
+
+    plants = [...activePlants, ...archivedPlants];
+    render();
+    await savePlantOrder();
 }
 
 function loadCatalog() {
@@ -513,12 +610,19 @@ function render() {
             </div>`;
 
         const isFirst = p.archived ? archiveIdx === 0 : activeIdx === 0;
+        const dragHandle = !p.archived ? `
+            <span class="tray-drag-handle" title="Arrastar para reordenar"
+                onpointerdown="plantDragStart(event, ${p.id})"
+                onclick="event.stopPropagation();event.preventDefault()">⠿</span>` : '';
         const card = `
-            <details class="collapsible-section" ${isFirst ? 'open' : ''}>
+            <details class="collapsible-section ${!p.archived ? 'plant-sortable' : ''}" data-plant-id="${p.id}" ${isFirst ? 'open' : ''}>
                 <summary class="collapsible-header">
-                    <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                        <span style="font-family:'Lora',serif;font-size:14px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0">${p.variety}</span>
-                        <span class="badge badge-muted badge-tracker">${p.startDate}</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${dragHandle}
+                        <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                            <span style="font-family:'Lora',serif;font-size:14px;font-weight:700;color:var(--text);text-transform:none;letter-spacing:0">${p.variety}</span>
+                            <span class="badge badge-muted badge-tracker">${p.startDate}</span>
+                        </div>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
                         <span class="badge ${stageColor}">${p.stage}</span>
@@ -582,8 +686,13 @@ let tState = { seeds: [], trays: [] };
 let tDrag  = {};
 let tCellModal = {};
 let tSelectedCatalogIdx = 0; // índice seleccionado no picker do catálogo
-const T_COLORS = ['#5d9b3c','#e8a020','#c0392b','#2980b9','#8e44ad','#e74c3c','#16a085','#d35400','#7f8c8d','#27ae60'];
+const T_COLORS = [
+    '#e53e3e','#e8a020','#f6c90e','#5d9b3c','#27ae60','#2980b9',
+    '#8e44ad','#e74c3c','#d35400','#16a085','#c0392b','#7f8c8d',
+    '#ff6b9d','#a0522d','#1abc9c'
+];
 let tSelectedColor = '#5d9b3c';
+let tCustomColor = null;
 
 // ── SUPABASE: SEEDS ────────────────────────────────────
 
@@ -613,7 +722,11 @@ async function tAddSeedDB() {
     const { data, error } = await _supabase.from('tray_seeds').insert([payload]).select().single();
     if (error) return alert('Erro ao guardar semente: ' + error.message);
     tState.seeds.push(data);
+    // Reset button in case it was in edit mode
+    const btn = document.getElementById('tSeedAddBtn');
+    if (btn) { btn.textContent = '+ Adicionar'; btn.onclick = tAddSeed; }
     tRenderSeeds();
+    // Re-render trays but preserve open state (tRenderTrays already handles this)
     tRenderTrays();
     document.getElementById('tSeedName').value = '';
 }
@@ -626,13 +739,54 @@ async function tDeleteSeed(id) {
     tRenderTrays();
 }
 
+function tEditSeed(id) {
+    const s = tState.seeds.find(s => s.id === id);
+    if (!s) return;
+    // Fill the "Nova Semente" form with the seed data for editing
+    document.getElementById('tSeedName').value = s.name;
+    tSelectedCatalogIdx = CATALOGO.findIndex(c => c.img === s.img);
+    if (tSelectedCatalogIdx < 0) tSelectedCatalogIdx = 0;
+    tSelectedColor = s.color;
+    tCustomColor   = T_COLORS.includes(s.color) ? null : s.color;
+    tRenderCatalogPicker();
+    tRenderColorRow();
+    // Switch the add button to "save edit" mode
+    const btn = document.getElementById('tSeedAddBtn');
+    btn.textContent = '✓ Guardar Alterações';
+    btn.onclick = () => tSaveEditSeed(id);
+    // Expand the "Nova Semente" section
+    const det = btn.closest('details');
+    if (det) det.open = true;
+    // Scroll to form
+    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function tSaveEditSeed(id) {
+    const name = document.getElementById('tSeedName').value.trim();
+    if (!name) return;
+    const selectedCatalog = CATALOGO[tSelectedCatalogIdx] || CATALOGO[0];
+    const payload = { name, img: selectedCatalog.img, color: tSelectedColor };
+    const { error } = await _supabase.from('tray_seeds').update(payload).eq('id', id);
+    if (error) return alert('Erro ao guardar: ' + error.message);
+    const s = tState.seeds.find(s => s.id === id);
+    if (s) Object.assign(s, payload);
+    // Reset add button
+    const btn = document.getElementById('tSeedAddBtn');
+    btn.textContent = '+ Adicionar';
+    btn.onclick = tAddSeed;
+    document.getElementById('tSeedName').value = '';
+    tRenderSeeds();
+    tRenderTrays();
+}
+
 // ── SUPABASE: TRAYS ────────────────────────────────────
 
 async function tLoadTrays() {
     const { data, error } = await _supabase
         .from('trays')
         .select('*')
-        .order('id', { ascending: true });
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: false });
     if (!error && data) {
         tState.trays = data;
         tRenderTrays();
@@ -644,14 +798,19 @@ async function tCreateTrayDB() {
     const cols = Math.max(1, Math.min(20, parseInt(document.getElementById('newTrayCols').value) || 4));
     const rows = Math.max(1, Math.min(20, parseInt(document.getElementById('newTrayRows').value) || 4));
     const cells = Array.from({ length: rows }, () => Array(cols).fill(null));
+    // Assign sort_order = current minimum - 1 so it appears first
+    const minOrder = tState.trays.length > 0
+        ? Math.min(...tState.trays.map(t => t.sort_order ?? 0))
+        : 0;
     const payload = {
         user_id: currentUserId,
         name, cols, rows, cells,
+        sort_order: minOrder - 1,
         created: new Date().toISOString().split('T')[0]
     };
     const { data, error } = await _supabase.from('trays').insert([payload]).select().single();
     if (error) return alert('Erro ao criar tabuleiro: ' + error.message);
-    tState.trays.push(data);
+    tState.trays.unshift(data); // prepend so it shows first
     closeNewTrayModal();
     tRenderTrays();
 }
@@ -678,7 +837,117 @@ async function tSaveCells(trayId, cells) {
     if (error) alert('Erro ao guardar células: ' + error.message);
 }
 
-// ── INIT ───────────────────────────────────────────────
+async function tSaveTrayOrder() {
+    // Write sort_order = index for each tray in current order
+    const updates = tState.trays.map((t, i) =>
+        _supabase.from('trays').update({ sort_order: i }).eq('id', t.id)
+    );
+    await Promise.all(updates);
+}
+
+// ── TRAY SORT (pointer-events drag, works on touch + mouse) ───────────────
+
+let _tSortState = null;
+
+function tTrayDragStart(e, trayId) {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const container = document.getElementById('tTraysContainer');
+    const srcEl = e.currentTarget.closest('.tray-sortable');
+    if (!srcEl) return;
+
+    // Clone as visual drag ghost
+    const ghost = srcEl.cloneNode(true);
+    ghost.style.cssText = `
+        position:fixed; z-index:9000; pointer-events:none; opacity:0.88;
+        width:${srcEl.offsetWidth}px; border-radius:12px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.28); transition:none;
+        background:var(--bg-card); border:2px solid var(--green);
+    `;
+    document.body.appendChild(ghost);
+
+    const rect = srcEl.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top  = rect.top + 'px';
+
+    srcEl.style.opacity = '0.35';
+    srcEl.style.pointerEvents = 'none';
+
+    _tSortState = { trayId, srcEl, ghost, offsetY, container };
+
+    document.addEventListener('pointermove', _tSortMove, { passive: false });
+    document.addEventListener('pointerup',   _tSortEnd,  { once: true });
+}
+
+function _tSortMove(e) {
+    e.preventDefault();
+    if (!_tSortState) return;
+    const { ghost, offsetY, container, srcEl } = _tSortState;
+
+    const y = e.clientY;
+    ghost.style.top = (y - offsetY) + 'px';
+
+    // Find which tray we're hovering over
+    const items = [...container.querySelectorAll('.tray-sortable')].filter(el => el !== srcEl);
+    let target = null;
+    let insertBefore = true;
+    for (const el of items) {
+        const r = el.getBoundingClientRect();
+        if (y >= r.top && y <= r.bottom) {
+            target = el;
+            insertBefore = y < r.top + r.height / 2;
+            break;
+        }
+    }
+
+    // Visual drop indicator
+    container.querySelectorAll('.tray-drop-line').forEach(l => l.remove());
+    if (target) {
+        const line = document.createElement('div');
+        line.className = 'tray-drop-line';
+        line.style.cssText = 'height:3px;background:var(--green);border-radius:2px;margin:2px 0;transition:none';
+        if (insertBefore) target.before(line);
+        else target.after(line);
+        _tSortState.target = target;
+        _tSortState.insertBefore = insertBefore;
+    } else {
+        _tSortState.target = null;
+    }
+}
+
+async function _tSortEnd(e) {
+    document.removeEventListener('pointermove', _tSortMove);
+    if (!_tSortState) return;
+
+    const { trayId, srcEl, ghost, container, target, insertBefore } = _tSortState;
+    _tSortState = null;
+
+    // Cleanup visuals
+    ghost.remove();
+    container.querySelectorAll('.tray-drop-line').forEach(l => l.remove());
+    srcEl.style.opacity = '';
+    srcEl.style.pointerEvents = '';
+
+    if (!target) return; // dropped in place, no change
+
+    // Reorder tState.trays array
+    const fromIdx = tState.trays.findIndex(t => t.id === trayId);
+    const toId    = parseInt(target.dataset.trayId);
+    let   toIdx   = tState.trays.findIndex(t => t.id === toId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+
+    const [moved] = tState.trays.splice(fromIdx, 1);
+    // Recalculate toIdx after splice
+    toIdx = tState.trays.findIndex(t => t.id === toId);
+    if (insertBefore) tState.trays.splice(toIdx, 0, moved);
+    else              tState.trays.splice(toIdx + 1, 0, moved);
+
+    tRenderTrays();
+    await tSaveTrayOrder();
+}
 
 async function tInit() {
     tRenderCatalogPicker();
@@ -712,6 +981,8 @@ async function tDefaultSeeds() {
 function tRenderCatalogPicker() {
     const grid = document.getElementById('tEmojiGrid');
     if (!grid) return;
+    if (CATALOGO.length === 0) return; // ainda a carregar
+    if (tSelectedCatalogIdx >= CATALOGO.length) tSelectedCatalogIdx = 0;
     grid.innerHTML = CATALOGO.map((c, i) => `
         <div onclick="tSelectCatalog(${i})" title="${c.nome}"
             style="cursor:pointer;border-radius:8px;padding:4px;border:2px solid ${i === tSelectedCatalogIdx ? 'var(--green)' : 'transparent'};
@@ -724,7 +995,7 @@ function tRenderCatalogPicker() {
 
     // Atualiza o input de nome automaticamente ao selecionar
     const nameInput = document.getElementById('tSeedName');
-    if (nameInput && !nameInput.value) nameInput.value = CATALOGO[tSelectedCatalogIdx].nome;
+    if (nameInput && !nameInput.value && CATALOGO[tSelectedCatalogIdx]) nameInput.value = CATALOGO[tSelectedCatalogIdx].nome;
 }
 
 function tSelectCatalog(idx) {
@@ -732,14 +1003,32 @@ function tSelectCatalog(idx) {
     tRenderCatalogPicker();
     // Auto-preenche o nome
     const nameInput = document.getElementById('tSeedName');
-    if (nameInput) nameInput.value = CATALOGO[idx].nome;
+    if (nameInput && CATALOGO[idx]) nameInput.value = CATALOGO[idx].nome;
 }
 
 function tRenderColorRow() {
-    document.getElementById('tColorRow').innerHTML = T_COLORS.map(c =>
+    const row = document.getElementById('tColorRow');
+    if (!row) return;
+    const swatches = T_COLORS.map(c =>
         `<div class="color-swatch ${c === tSelectedColor ? 'selected' : ''}"
               style="background:${c}" onclick="tSelectColor('${c}')"></div>`
     ).join('');
+    // Custom color swatch (shown if a custom color is active)
+    const customSwatch = tCustomColor
+        ? `<div class="color-swatch ${tCustomColor === tSelectedColor ? 'selected' : ''}"
+                style="background:${tCustomColor}" onclick="tSelectColor('${tCustomColor}')"></div>`
+        : '';
+    // "+" button to open native color picker
+    const addBtn = `<label title="Cor personalizada" style="width:22px;height:22px;border-radius:50%;border:2px dashed var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-faint);transition:all 0.15s;flex-shrink:0" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+        +<input type="color" id="tColorPicker" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" onchange="tApplyCustomColor(this.value)">
+    </label>`;
+    row.innerHTML = swatches + customSwatch + addBtn;
+}
+
+function tApplyCustomColor(hex) {
+    tCustomColor = hex;
+    tSelectedColor = hex;
+    tRenderColorRow();
 }
 
 function tSelectColor(c) { tSelectedColor = c; tRenderColorRow(); }
@@ -806,7 +1095,7 @@ function tRenderSeeds() {
     const lib = document.getElementById('tray-seed-library');
     if (!lib) return;
     if (tState.seeds.length === 0) {
-        lib.innerHTML = '<div style="font-size:11px;color:var(--text-faint);text-align:center;padding:16px">Adiciona sementes</div>';
+        lib.innerHTML = '<div style="font-size:11px;color:var(--text-faint);text-align:center;margin:16px">Adiciona sementes</div>';
         return;
     }
     lib.innerHTML = tState.seeds.map(s => {
@@ -826,8 +1115,16 @@ function tRenderSeeds() {
                 </div>
             </div>
             <div style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></div>
-            <div onclick="tDeleteSeed(${s.id})"
-                style="cursor:pointer;font-size:11px;color:var(--text-faint);padding:2px 4px" title="Remover">✕</div>
+            <div onclick="event.stopPropagation();tEditSeed(${s.id})"
+                style="cursor:pointer;font-size:11px;color:var(--text-faint);padding:2px 5px;border-radius:4px;transition:all 0.1s"
+                onmouseover="this.style.color='var(--green)'"
+                onmouseout="this.style.color='var(--text-faint)'"
+                title="Editar">✏️</div>
+            <div onclick="event.stopPropagation();tDeleteSeed(${s.id})"
+                style="cursor:pointer;font-size:11px;color:var(--text-faint);padding:2px 4px;border-radius:4px;transition:all 0.1s"
+                onmouseover="this.style.color='var(--red)'"
+                onmouseout="this.style.color='var(--text-faint)'"
+                title="Remover">✕</div>
         </div>`;
     }).join('');
 }
@@ -849,6 +1146,13 @@ function closeNewTrayModal() { document.getElementById('newTrayModal').classList
 function tRenderTrays() {
     const c = document.getElementById('tTraysContainer');
     if (!c) return;
+
+    // Save which trays are currently open by their id
+    const openIds = new Set();
+    c.querySelectorAll('details[data-tray-id]').forEach(d => {
+        if (d.open) openIds.add(parseInt(d.dataset.trayId));
+    });
+
     if (tState.trays.length === 0) {
         c.innerHTML = `
             <div class="no-trays">
@@ -862,7 +1166,10 @@ function tRenderTrays() {
     c.innerHTML = tState.trays.map((tray, trayIdx) => {
         const filled = tray.cells.flat().filter(Boolean).length;
         const total  = tray.rows * tray.cols;
-        const colW   = Math.max(54, Math.min(86, Math.floor(380 / tray.cols) - 6));
+
+        // Determine if this tray should be open:
+        // - if we have saved state, use it; otherwise open the first one
+        const shouldBeOpen = openIds.size > 0 ? openIds.has(tray.id) : trayIdx === 0;
 
         let legendSeeds = {};
         tray.cells.flat().forEach(cell => {
@@ -876,11 +1183,11 @@ function tRenderTrays() {
             const pos = `${String.fromCharCode(65 + ci)}${ri + 1}`;
             if (cell) {
                 const s = tState.seeds.find(s => s.id === cell.seedId);
-                if (!s) return tEmptyCell(tray.id, ri, ci, colW, pos);
+                if (!s) return tEmptyCell(tray.id, ri, ci, pos);
                 const img = getSeedImg(s);
                 return `
                     <div class="tray-cell filled"
-                        style="width:${colW}px;border-color:${s.color}55;background:${s.color}14"
+                        style="border-color:${s.color}55;background:${s.color}14"
                         draggable="true"
                         ondragstart="tOnCellDragStart(event,${tray.id},${ri},${ci})"
                         ondragend="tOnCellDragEnd(event)"
@@ -891,13 +1198,13 @@ function tRenderTrays() {
                         <span class="cell-pos">${pos}</span>
                         <div class="cell-remove" onclick="tRemoveCell(event,${tray.id},${ri},${ci})">✕</div>
                         <img src="${img}" alt="${s.name}"
-                            style="width:32px;height:32px;object-fit:contain;transition:transform 0.15s"
+                            style="width:36px;height:36px;object-fit:contain;transition:transform 0.15s"
                             onerror="this.src='${IMG_DEFAULT}'"
                             class="cell-img">
                         <span class="cell-label" style="color:${s.color}">${s.name}</span>
                     </div>`;
             }
-            return tEmptyCell(tray.id, ri, ci, colW, pos);
+            return tEmptyCell(tray.id, ri, ci, pos);
         }).join('')).join('');
 
         const legend = Object.values(legendSeeds).map(s => {
@@ -912,9 +1219,12 @@ function tRenderTrays() {
         }).join('');
 
         return `
-            <details class="collapsible-section" ${trayIdx === 0 ? 'open' : ''}>
+            <details class="collapsible-section tray-sortable" data-tray-id="${tray.id}" ${shouldBeOpen ? 'open' : ''}>
                 <summary class="collapsible-header">
-                    <div style="display:flex;align-items:center;gap:10px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span class="tray-drag-handle" title="Arrastar para reordenar"
+                            onpointerdown="tTrayDragStart(event, ${tray.id})"
+                            onclick="event.stopPropagation();event.preventDefault()">⠿</span>
                         <span class="badge badge-muted">${tray.cols}×${tray.rows}</span>
                         <input class="tray-name-input" value="${tray.name}"
                             onclick="event.stopPropagation()"
@@ -935,8 +1245,8 @@ function tRenderTrays() {
                     </div>
                 </summary>
                 <div class="tray-wrapper" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
-                    <div style="padding:16px;overflow-x:auto">
-                        <div style="display:grid;grid-template-columns:repeat(${tray.cols},${colW}px);gap:5px;width:fit-content">
+                    <div style="margin:16px;overflow-x:auto">
+                        <div class="tray-grid" style="--tray-cols:${tray.cols}">
                             ${cellsHTML}
                         </div>
                     </div>
@@ -946,9 +1256,9 @@ function tRenderTrays() {
     }).join('');
 }
 
-function tEmptyCell(trayId, ri, ci, colW, pos) {
+function tEmptyCell(trayId, ri, ci, pos) {
     return `
-        <div class="tray-cell" style="width:${colW}px"
+        <div class="tray-cell"
             ondragover="tOnDragOver(event)"
             ondragleave="tOnDragLeave(event)"
             ondrop="tOnDrop(event,${trayId},${ri},${ci})"
@@ -1113,6 +1423,7 @@ let nfcReader      = null;    // NDEFReader instance (scan mode)
 let nfcWriter      = null;    // NDEFReader instance (write mode)
 let nfcScanActive  = false;
 let nfcResultTagId = null;    // tag id shown in result modal
+let _nfcSortState  = null;    // drag-to-reorder state
 
 // ── INIT ──────────────────────────────────────────────
 
@@ -1124,8 +1435,91 @@ async function nfcLoadTags() {
     const { data, error } = await _supabase
         .from('nfc_tags')
         .select('*')
+        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false });
     if (!error) nfcTags = data || [];
+}
+
+async function saveNfcTagOrder() {
+    const updates = nfcTags.map((t, i) =>
+        _supabase.from('nfc_tags').update({ sort_order: i }).eq('id', t.id)
+    );
+    await Promise.all(updates);
+}
+
+function nfcTagDragStart(e, tagId) {
+    e.stopPropagation();
+    e.preventDefault();
+    const container = document.getElementById('nfcTagList');
+    const srcEl = e.currentTarget.closest('.nfc-sortable');
+    if (!srcEl) return;
+    const ghost = srcEl.cloneNode(true);
+    ghost.style.cssText = `
+        position:fixed; z-index:9000; pointer-events:none; opacity:0.88;
+        width:${srcEl.offsetWidth}px; border-radius:16px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.28); transition:none;
+        background:var(--bg-card); border:2px solid var(--green);
+    `;
+    document.body.appendChild(ghost);
+    const rect = srcEl.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top  = rect.top  + 'px';
+    srcEl.style.opacity = '0.35';
+    srcEl.style.pointerEvents = 'none';
+    _nfcSortState = { tagId, srcEl, ghost, offsetY, container };
+    document.addEventListener('pointermove', _nfcSortMove, { passive: false });
+    document.addEventListener('pointerup',   _nfcSortEnd,  { once: true });
+}
+
+function _nfcSortMove(e) {
+    e.preventDefault();
+    if (!_nfcSortState) return;
+    const { ghost, offsetY, container, srcEl } = _nfcSortState;
+    const y = e.clientY;
+    ghost.style.top = (y - offsetY) + 'px';
+    const items = [...container.querySelectorAll('.nfc-sortable')].filter(el => el !== srcEl);
+    let target = null, insertBefore = true;
+    for (const el of items) {
+        const r = el.getBoundingClientRect();
+        if (y >= r.top && y <= r.bottom) {
+            target = el; insertBefore = y < r.top + r.height / 2; break;
+        }
+    }
+    container.querySelectorAll('.nfc-drop-line').forEach(l => l.remove());
+    if (target) {
+        const line = document.createElement('div');
+        line.className = 'nfc-drop-line';
+        line.style.cssText = 'height:3px;background:var(--green);border-radius:2px;margin:2px 0;transition:none';
+        if (insertBefore) target.before(line);
+        else target.after(line);
+        _nfcSortState.target = target;
+        _nfcSortState.insertBefore = insertBefore;
+    } else {
+        _nfcSortState.target = null;
+    }
+}
+
+async function _nfcSortEnd(e) {
+    document.removeEventListener('pointermove', _nfcSortMove);
+    if (!_nfcSortState) return;
+    const { tagId, srcEl, ghost, container, target, insertBefore } = _nfcSortState;
+    _nfcSortState = null;
+    ghost.remove();
+    container.querySelectorAll('.nfc-drop-line').forEach(l => l.remove());
+    srcEl.style.opacity = '';
+    srcEl.style.pointerEvents = '';
+    if (!target) return;
+    const fromIdx = nfcTags.findIndex(t => t.id === tagId);
+    const toId    = parseInt(target.dataset.tagId);
+    let   toIdx   = nfcTags.findIndex(t => t.id === toId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    const [moved] = nfcTags.splice(fromIdx, 1);
+    toIdx = nfcTags.findIndex(t => t.id === toId);
+    if (insertBefore) nfcTags.splice(toIdx, 0, moved);
+    else              nfcTags.splice(toIdx + 1, 0, moved);
+    nfcRender();
+    await saveNfcTagOrder();
 }
 
 // Also populate the pepper datalist for nfc modal
@@ -1206,8 +1600,12 @@ function nfcTagCard(tag) {
         ? new Date(tag.plant_date + 'T00:00:00').toLocaleDateString('pt-PT', { day:'2-digit', month:'short', year:'numeric' })
         : '—';
     return `
-        <div class="nfc-tag-card fade-in">
+        <div class="nfc-tag-card nfc-sortable fade-in" data-tag-id="${tag.id}">
             <div style="display:flex;gap:14px;align-items:center">
+                <span class="tray-drag-handle" title="Arrastar para reordenar"
+                    onpointerdown="nfcTagDragStart(event, ${tag.id})"
+                    onclick="event.stopPropagation();event.preventDefault()"
+                    style="flex-shrink:0;font-size:18px;color:var(--text-faint);cursor:grab;padding:4px 2px">⠿</span>
                 <div class="plant-img-wrap" style="width:52px;height:52px;flex-shrink:0">
                     <img src="${img}" alt="${tag.variety||''}" onerror="this.src='${IMG_DEFAULT}'" style="width:100%;height:100%;object-fit:contain;padding:4px">
                 </div>
@@ -1548,3 +1946,561 @@ const _origNfcInit = nfcInit;
     const origLoad = loadFromSupabase;
     window.loadFromSupabaseOriginal = origLoad;
 })();
+
+// ════════════════════════════════════════════════════════
+// CATÁLOGO TAB — categorias, variedades, info detalhada
+// ════════════════════════════════════════════════════════
+
+// ── Categorias com emoji e cor ─────────────────────────
+const CAT_META = {
+    'Ervas Aromáticas': { emoji: '🌿', color: '#27ae60', bg: '#edf5e8' },
+    'Picantes':         { emoji: '🌶️', color: '#e53e3e', bg: '#fdf0ee' },
+    'Legumes':          { emoji: '🥦', color: '#2980b9', bg: '#e8f2fb' },
+    'Frutos':           { emoji: '🍅', color: '#e8a020', bg: '#fef4e8' },
+    'Tubérculos':       { emoji: '🥕', color: '#d4730a', bg: '#fef4e8' },
+    'Flores':           { emoji: '🌸', color: '#8e44ad', bg: '#f5eaf9' },
+    'Outro':            { emoji: '📦', color: '#7f8c8d', bg: '#f2f0eb' },
+};
+
+const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+// ── Catálogo base — variedades embutidas com info detalhada
+const CATALOG_BASE = [
+    // ── ERVAS AROMÁTICAS ──────────────────────────────
+    {
+        nome: 'Manjericão', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Erva aromática mediterrânea, essencial para pesto e saladas. Sensível ao frio.',
+        sow_in: '2-4', sow_out: '4-6', plant: '5-6', harvest: '6-10',
+        germ_days: '7-14', days_to_harvest: '60-75', spacing: '20-30', height: '30-60',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Salsa', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Bienal muito versátil, rica em vitamina C e ferro. Prefere solos húmidos.',
+        sow_in: '2-4', sow_out: '3-6', plant: '4-6', harvest: '5-11',
+        germ_days: '14-28', days_to_harvest: '70-90', spacing: '15-20', height: '30-45',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Coentros', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Erva de crescimento rápido, tipicamente portuguesa. Floresce depressa no calor.',
+        sow_in: '2-4', sow_out: '3-5', plant: '4-5', harvest: '5-9',
+        germ_days: '7-10', days_to_harvest: '45-70', spacing: '15-20', height: '20-50',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Tomilho', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Arbusto perene resistente à seca. Excelente para carnes e marinadas.',
+        sow_in: '2-3', sow_out: '4-5', plant: '4-6', harvest: '5-11',
+        germ_days: '14-21', days_to_harvest: '90-120', spacing: '20-30', height: '15-30',
+        sun: 'Sol pleno', water: 'Baixa', shu: null
+    },
+    {
+        nome: 'Alecrim', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Arbusto mediterrâneo perene. Tolera bem a seca e solos pobres.',
+        sow_in: '2-4', sow_out: '4-5', plant: '4-6', harvest: '1-12',
+        germ_days: '14-28', days_to_harvest: '90-120', spacing: '50-80', height: '50-150',
+        sun: 'Sol pleno', water: 'Baixa', shu: null
+    },
+    {
+        nome: 'Hortelã', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
+        desc: 'Perene invasiva, melhor cultivada em vaso. Muito aromática e versátil.',
+        sow_in: '2-3', sow_out: '3-5', plant: '4-6', harvest: '4-10',
+        germ_days: '10-16', days_to_harvest: '60-90', spacing: '30-40', height: '30-60',
+        sun: 'Meia-sombra', water: 'Alta', shu: null
+    },
+    // ── PICANTES ──────────────────────────────────────
+    {
+        nome: 'Jalapeño', categoria: 'Picantes', img: 'imagens/jalapeno.webp',
+        desc: 'Pimento mexicano de picante moderado. Muito popular em culinária e conservas.',
+        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
+        germ_days: '7-14', days_to_harvest: '70-85', spacing: '40-50', height: '60-90',
+        sun: 'Sol pleno', water: 'Moderada', shu: 5000
+    },
+    {
+        nome: 'Habanero Vermelho', categoria: 'Picantes', img: 'imagens/habanero_vermelho.webp',
+        desc: 'Originário das Caraíbas. Aroma frutado único com calor intenso.',
+        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
+        germ_days: '14-21', days_to_harvest: '90-100', spacing: '45-60', height: '60-120',
+        sun: 'Sol pleno', water: 'Moderada', shu: 350000
+    },
+    {
+        nome: 'Carolina Reaper', categoria: 'Picantes', img: 'imagens/carolina_reaper.webp',
+        desc: 'Record mundial de picante. Desenvolvida nos EUA. Para utilizadores experientes.',
+        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
+        germ_days: '14-28', days_to_harvest: '100-120', spacing: '50-70', height: '60-100',
+        sun: 'Sol pleno', water: 'Moderada', shu: 2200000
+    },
+    {
+        nome: 'Ghost Pepper', categoria: 'Picantes', img: 'imagens/default.webp',
+        desc: 'Bhut Jolokia — pimento indiano extremamente picante. Cresce bem em clima quente.',
+        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
+        germ_days: '21-35', days_to_harvest: '100-120', spacing: '50-60', height: '60-120',
+        sun: 'Sol pleno', water: 'Moderada', shu: 1041427
+    },
+    {
+        nome: 'Serrano', categoria: 'Picantes', img: 'imagens/default.webp',
+        desc: 'Pimento mexicano mais picante que o jalapeño. Excelente para salsas frescas.',
+        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
+        germ_days: '7-14', days_to_harvest: '75-90', spacing: '40-50', height: '45-60',
+        sun: 'Sol pleno', water: 'Moderada', shu: 15000
+    },
+    // ── LEGUMES ───────────────────────────────────────
+    {
+        nome: 'Alface', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'Cultura de folha rápida, ideal para iniciantes. Prefere temperaturas amenas.',
+        sow_in: '2-4', sow_out: '3-9', plant: '3-10', harvest: '4-11',
+        germ_days: '4-10', days_to_harvest: '45-60', spacing: '20-30', height: '20-35',
+        sun: 'Meia-sombra', water: 'Alta', shu: null
+    },
+    {
+        nome: 'Cenoura', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'Raiz saborosa rica em beta-caroteno. Prefere solos soltos e profundos.',
+        sow_in: null, sow_out: '2-7', plant: null, harvest: '5-11',
+        germ_days: '10-21', days_to_harvest: '70-90', spacing: '5-8', height: '20-30',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Alho-francês', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'Versátil e tolerante ao frio. Pode ficar no solo durante meses.',
+        sow_in: '2-3', sow_out: '3-4', plant: '5-7', harvest: '10-3',
+        germ_days: '10-14', days_to_harvest: '120-150', spacing: '10-15', height: '30-60',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Feijão-verde', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'De crescimento rápido, variedades anãs ou trepadeiras. Semente direta.',
+        sow_in: null, sow_out: '4-7', plant: '4-7', harvest: '7-10',
+        germ_days: '6-12', days_to_harvest: '55-70', spacing: '10-15', height: '30-200',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Ervilha', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'Trepadeira de estação fria. Muito produtiva quando bem tutorada.',
+        sow_in: '1-2', sow_out: '2-4', plant: '2-4', harvest: '5-7',
+        germ_days: '5-10', days_to_harvest: '60-70', spacing: '5-8', height: '60-180',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Courgette', categoria: 'Legumes', img: 'imagens/default.webp',
+        desc: 'Planta produtiva de verão. Uma planta pode bastar para a família.',
+        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-10',
+        germ_days: '5-10', days_to_harvest: '50-70', spacing: '80-100', height: '30-50',
+        sun: 'Sol pleno', water: 'Alta', shu: null
+    },
+    // ── FRUTOS ────────────────────────────────────────
+    {
+        nome: 'Tomate', categoria: 'Frutos', img: 'imagens/tomate.webp',
+        desc: 'Fruto de verão por excelência. Variedades para todos os gostos e usos.',
+        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
+        germ_days: '6-14', days_to_harvest: '70-85', spacing: '50-80', height: '60-200',
+        sun: 'Sol pleno', water: 'Alta', shu: null
+    },
+    {
+        nome: 'Tomate Cherry', categoria: 'Frutos', img: 'imagens/tomate_cherry.webp',
+        desc: 'Tomates pequenos e doces, muito produtivos. Ótimos para saladas e petiscos.',
+        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
+        germ_days: '6-12', days_to_harvest: '60-70', spacing: '40-60', height: '60-150',
+        sun: 'Sol pleno', water: 'Alta', shu: null
+    },
+    {
+        nome: 'Pimento Vermelho', categoria: 'Frutos', img: 'imagens/pimento_vermelho.webp',
+        desc: 'Pimento doce vermelho, rico em vitamina C. Amadurece lentamente.',
+        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
+        germ_days: '7-14', days_to_harvest: '70-90', spacing: '40-50', height: '60-90',
+        sun: 'Sol pleno', water: 'Moderada', shu: 0
+    },
+    {
+        nome: 'Pepino', categoria: 'Frutos', img: 'imagens/default.webp',
+        desc: 'Cultura de verão que adora calor. Cresce bem em treliça.',
+        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-9',
+        germ_days: '5-10', days_to_harvest: '50-65', spacing: '30-50', height: '100-200',
+        sun: 'Sol pleno', water: 'Alta', shu: null
+    },
+    {
+        nome: 'Melancia', categoria: 'Frutos', img: 'imagens/default.webp',
+        desc: 'Fruto de verão que precisa de muito espaço e calor. Vale a pena!',
+        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-9',
+        germ_days: '7-14', days_to_harvest: '80-100', spacing: '120-180', height: '30-60',
+        sun: 'Sol pleno', water: 'Alta', shu: null
+    },
+    // ── TUBÉRCULOS ────────────────────────────────────
+    {
+        nome: 'Alho', categoria: 'Tubérculos', img: 'imagens/default.webp',
+        desc: 'Plantado no outono para colheita de verão. Fácil e muito útil na cozinha.',
+        sow_in: null, sow_out: '10-11', plant: '10-11', harvest: '6-7',
+        germ_days: '7-14', days_to_harvest: '240-280', spacing: '10-15', height: '30-60',
+        sun: 'Sol pleno', water: 'Baixa', shu: null
+    },
+    {
+        nome: 'Cebola', categoria: 'Tubérculos', img: 'imagens/default.webp',
+        desc: 'Cultura de longa duração. Semeada no outono ou primavera.',
+        sow_in: '1-2', sow_out: '8-10', plant: '3-4', harvest: '6-8',
+        germ_days: '10-14', days_to_harvest: '100-150', spacing: '10-15', height: '30-50',
+        sun: 'Sol pleno', water: 'Moderada', shu: null
+    },
+    {
+        nome: 'Batata-doce', categoria: 'Tubérculos', img: 'imagens/default.webp',
+        desc: 'Tubérculo tropical muito nutritivo. Adora calor e solos bem drenados.',
+        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '9-11',
+        germ_days: '14-21', days_to_harvest: '120-150', spacing: '30-40', height: '20-30',
+        sun: 'Sol pleno', water: 'Baixa', shu: null
+    },
+];
+
+// ── Estado do catálogo tab ─────────────────────────────
+let catalogTabEntries = []; // merged base + custom
+let catalogActiveCat  = 'Todos';
+let catalogDetailId   = null; // id or index being viewed
+
+function catalogTabInit() {
+    // Merge base + custom
+    catalogTabEntries = [
+        ...CATALOG_BASE.map((e, i) => ({ ...e, _id: `base_${i}`, _custom: false })),
+        ...catalogCustom.map(e => ({
+            nome: e.nome, img: e.img,
+            categoria: e.categoria || 'Outro',
+            desc: e.desc || '',
+            sow_in: e.sow_in || null, sow_out: e.sow_out || null,
+            plant: e.plant || null, harvest: e.harvest || null,
+            germ_days: e.germ_days || null, days_to_harvest: e.days_to_harvest || null,
+            spacing: e.spacing || null, height: e.height || null,
+            sun: e.sun || null, water: e.water || null,
+            shu: e.shu != null ? e.shu : null,
+            _id: `custom_${e.id}`, _custom: true, _dbId: e.id
+        }))
+    ];
+    catalogRenderPills();
+    catalogFilterRender();
+}
+
+function catalogRenderPills() {
+    const el = document.getElementById('catalogCatPills');
+    if (!el) return;
+    const cats = ['Todos', ...Object.keys(CAT_META)];
+    el.innerHTML = cats.map(c => {
+        const meta = CAT_META[c];
+        const active = c === catalogActiveCat;
+        const style = active && meta
+            ? `background:${meta.color};color:#fff;border-color:${meta.color}`
+            : active
+            ? 'background:var(--text);color:var(--bg-card);border-color:var(--text)'
+            : '';
+        return `<button class="cat-pill ${active ? 'active' : ''}" style="${style}" onclick="catalogSetCat('${c}')">
+            ${meta ? meta.emoji + ' ' : ''}${c}
+        </button>`;
+    }).join('');
+}
+
+function catalogSetCat(cat) {
+    catalogActiveCat = cat;
+    catalogRenderPills();
+    catalogFilterRender();
+}
+
+function catalogFilterRender() {
+    const search = (document.getElementById('catalogSearch')?.value || '').toLowerCase();
+    let entries = catalogTabEntries;
+    if (catalogActiveCat !== 'Todos') {
+        entries = entries.filter(e => e.categoria === catalogActiveCat);
+    }
+    if (search) {
+        entries = entries.filter(e => e.nome.toLowerCase().includes(search) ||
+            (e.desc || '').toLowerCase().includes(search));
+    }
+    catalogRenderGrid(entries);
+}
+
+function catalogRenderGrid(entries) {
+    const grid = document.getElementById('catalogGrid');
+    if (!grid) return;
+    if (entries.length === 0) {
+        grid.innerHTML = `<div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+            <div style="font-size:36px;margin-bottom:12px">🌱</div>
+            <div style="font-family:'Lora',serif;font-size:16px;font-weight:600">Sem variedades encontradas</div>
+            <div style="font-size:12px;margin-top:6px">Tenta outra pesquisa ou adiciona uma nova variedade</div>
+        </div>`;
+        return;
+    }
+
+    // Group by category if showing all
+    if (catalogActiveCat === 'Todos') {
+        const groups = {};
+        entries.forEach(e => {
+            if (!groups[e.categoria]) groups[e.categoria] = [];
+            groups[e.categoria].push(e);
+        });
+        grid.innerHTML = Object.entries(groups).map(([cat, items]) => {
+            const meta = CAT_META[cat] || CAT_META['Outro'];
+            return `
+            <div style="margin-bottom:24px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <span style="font-size:18px">${meta.emoji}</span>
+                    <span style="font-family:'Lora',serif;font-size:16px;font-weight:700">${cat}</span>
+                    <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-faint)">(${items.length})</span>
+                </div>
+                <div class="catalog-grid">${items.map(e => catalogCardHTML(e)).join('')}</div>
+            </div>`;
+        }).join('');
+    } else {
+        grid.innerHTML = `<div class="catalog-grid">${entries.map(e => catalogCardHTML(e)).join('')}</div>`;
+    }
+}
+
+function catalogCardHTML(e) {
+    const meta = CAT_META[e.categoria] || CAT_META['Outro'];
+    const shuBadge = e.shu != null
+        ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:${meta.color};font-weight:700;margin-top:4px">${e.shu.toLocaleString()} SHU</div>`
+        : '';
+    const harvestBadge = e.harvest
+        ? `<div style="font-size:10px;color:var(--text-faint);margin-top:4px">🍴 ${formatMonthRange(e.harvest)}</div>`
+        : '';
+    const customBadge = e._custom
+        ? `<span style="font-size:9px;background:var(--green-bg);color:var(--green);padding:2px 6px;border-radius:6px;font-weight:700">CUSTOM</span>`
+        : '';
+    return `
+    <div class="catalog-card" onclick="openCatalogDetail('${e._id}')">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:52px;height:52px;border-radius:10px;background:${meta.bg};border:1px solid ${meta.color}22;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                <img src="${e.img || 'imagens/default.webp'}" alt="${e.nome}"
+                    style="width:100%;height:100%;object-fit:contain"
+                    onerror="this.src='imagens/default.webp'">
+            </div>
+            <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="font-family:'Lora',serif;font-size:14px;font-weight:700">${e.nome}</span>
+                    ${customBadge}
+                </div>
+                <div style="font-size:10px;color:${meta.color};font-weight:600;margin-top:2px">${meta.emoji} ${e.categoria}</div>
+                ${shuBadge}
+                ${harvestBadge}
+                ${e.germ_days ? `<div style="font-size:10px;color:var(--text-faint);margin-top:3px">🌱 Germ. ${e.germ_days} dias</div>` : ''}
+            </div>
+        </div>
+        ${e.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${e.desc}</div>` : ''}
+    </div>`;
+}
+
+function formatMonthRange(str) {
+    if (!str) return '';
+    const parts = str.split('-');
+    if (parts.length === 2) {
+        const a = parseInt(parts[0]) - 1;
+        const b = parseInt(parts[1]) - 1;
+        if (!isNaN(a) && !isNaN(b) && MONTHS_PT[a] && MONTHS_PT[b])
+            return MONTHS_PT[a] + ' – ' + MONTHS_PT[b];
+    }
+    return str;
+}
+
+function openCatalogDetail(id) {
+    catalogDetailId = id;
+    const e = catalogTabEntries.find(x => x._id === id);
+    if (!e) return;
+    const meta = CAT_META[e.categoria] || CAT_META['Outro'];
+
+    document.getElementById('cdImg').src = e.img || 'imagens/default.webp';
+    document.getElementById('cdName').textContent = e.nome;
+    document.getElementById('cdCatBadge').innerHTML =
+        `<span style="font-size:11px;font-weight:700;color:${meta.color}">${meta.emoji} ${e.categoria}</span>`;
+    document.getElementById('cdDesc').textContent = e.desc || '';
+
+    // SHU
+    const shuEl = document.getElementById('cdShu');
+    if (e.shu != null) {
+        shuEl.style.display = '';
+        shuEl.innerHTML = `
+            <div style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px">
+                <span style="font-size:20px">🌶️</span>
+                <div>
+                    <div style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:var(--red)">${e.shu.toLocaleString()} SHU</div>
+                    <div style="font-size:10px;color:var(--text-faint)">${shuLevel(e.shu)}</div>
+                </div>
+            </div>`;
+    } else {
+        shuEl.style.display = 'none';
+    }
+
+    // Info grid
+    const rows = [
+        { icon: '🌱', label: 'Semear (interior)', val: formatMonthRange(e.sow_in) },
+        { icon: '🌤️', label: 'Semear (exterior)',  val: formatMonthRange(e.sow_out) },
+        { icon: '🌿', label: 'Plantar / Transpl.', val: formatMonthRange(e.plant) },
+        { icon: '🍴', label: 'Colher',             val: formatMonthRange(e.harvest) },
+        { icon: '⏱️', label: 'Germinação',         val: e.germ_days ? e.germ_days + ' dias' : null },
+        { icon: '📅', label: 'Dias até colheita',  val: e.days_to_harvest ? e.days_to_harvest + ' dias' : null },
+        { icon: '📏', label: 'Espaçamento',        val: e.spacing ? e.spacing + ' cm' : null },
+        { icon: '📐', label: 'Altura',             val: e.height ? e.height + ' cm' : null },
+        { icon: '☀️', label: 'Sol',                val: e.sun },
+        { icon: '💧', label: 'Rega',               val: e.water },
+    ].filter(r => r.val);
+
+    document.getElementById('cdInfoGrid').innerHTML = rows.map(r => `
+        <div class="catalog-info-item">
+            <span style="font-size:16px">${r.icon}</span>
+            <div>
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-faint);font-weight:600">${r.label}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text)">${r.val}</div>
+            </div>
+        </div>`).join('');
+
+    // Month bars
+    document.getElementById('cdExtraInfo').innerHTML = buildMonthBar(e);
+
+    // Show/hide edit button
+    document.getElementById('cdEditBtn').style.display = e._custom ? '' : 'none';
+
+    document.getElementById('catalogDetailModal').classList.add('open');
+}
+
+function shuLevel(shu) {
+    if (shu === 0) return 'Sem picante';
+    if (shu < 5000) return 'Muito suave';
+    if (shu < 30000) return 'Suave / Moderado';
+    if (shu < 100000) return 'Médio';
+    if (shu < 500000) return 'Forte';
+    if (shu < 1000000) return 'Muito forte';
+    return '🔥 Extremo / Recorde';
+}
+
+function buildMonthBar(e) {
+    const ranges = [
+        { label: 'Semear Interior', range: e.sow_in, color: '#27ae60' },
+        { label: 'Semear Exterior', range: e.sow_out, color: '#2980b9' },
+        { label: 'Plantar',         range: e.plant,   color: '#8e44ad' },
+        { label: 'Colheita',        range: e.harvest, color: '#e8a020' },
+    ].filter(r => r.range);
+    if (!ranges.length) return '';
+
+    function parseRange(str) {
+        const [a, b] = str.split('-').map(Number);
+        return { a, b };
+    }
+    function inRange(m, str) {
+        const { a, b } = parseRange(str);
+        if (a <= b) return m >= a && m <= b;
+        return m >= a || m <= b; // wrap-around (e.g. 10-3)
+    }
+
+    const bars = ranges.map(r => {
+        const cells = Array.from({ length: 12 }, (_, i) => {
+            const active = inRange(i + 1, r.range);
+            return `<div style="flex:1;height:10px;background:${active ? r.color : 'var(--border)'};border-radius:3px"></div>`;
+        }).join('');
+        return `
+        <div style="margin-bottom:8px">
+            <div style="font-size:10px;font-weight:600;color:var(--text-muted);margin-bottom:4px">${r.label}</div>
+            <div style="display:flex;gap:2px">${cells}</div>
+        </div>`;
+    }).join('');
+
+    const header = `<div style="display:flex;gap:2px;margin-bottom:4px">
+        ${MONTHS_PT.map(m => `<div style="flex:1;text-align:center;font-size:8px;color:var(--text-faint);font-family:'DM Mono',monospace">${m}</div>`).join('')}
+    </div>`;
+
+    return `
+    <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:12px;padding:14px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--text-faint);margin-bottom:12px">Calendário anual</div>
+        ${header}${bars}
+    </div>`;
+}
+
+function closeCatalogDetailModal() {
+    document.getElementById('catalogDetailModal').classList.remove('open');
+}
+
+function openEditCatalogFromDetail() {
+    closeCatalogDetailModal();
+    const e = catalogTabEntries.find(x => x._id === catalogDetailId);
+    if (!e || !e._custom) return;
+    openEditCatalogModal(e._dbId);
+}
+
+// ── Add/Edit Modal ─────────────────────────────────────
+
+function openAddCatalogModal() {
+    document.getElementById('catalogAddModalTitle').textContent = 'Nova Variedade';
+    document.getElementById('catalogEditId').value = '';
+    ['camName','camDesc','camImg','camSowIn','camSowOut','camPlant','camHarvest',
+     'camGermDays','camDaysToHarvest','camSpacing','camHeight','camShu'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    document.getElementById('camCat').value = 'Ervas Aromáticas';
+    document.getElementById('camSun').value = '';
+    document.getElementById('camWater').value = '';
+    document.getElementById('catalogAddModal').classList.add('open');
+}
+
+function openEditCatalogModal(dbId) {
+    const e = catalogCustom.find(x => x.id === dbId);
+    if (!e) return;
+    document.getElementById('catalogAddModalTitle').textContent = 'Editar Variedade';
+    document.getElementById('catalogEditId').value = dbId;
+    document.getElementById('camName').value          = e.nome || '';
+    document.getElementById('camCat').value           = e.categoria || 'Outro';
+    document.getElementById('camDesc').value          = e.desc || '';
+    document.getElementById('camImg').value           = e.img === IMG_DEFAULT ? '' : (e.img || '');
+    document.getElementById('camSowIn').value         = e.sow_in || '';
+    document.getElementById('camSowOut').value        = e.sow_out || '';
+    document.getElementById('camPlant').value         = e.plant || '';
+    document.getElementById('camHarvest').value       = e.harvest || '';
+    document.getElementById('camGermDays').value      = e.germ_days || '';
+    document.getElementById('camDaysToHarvest').value = e.days_to_harvest || '';
+    document.getElementById('camSpacing').value       = e.spacing || '';
+    document.getElementById('camHeight').value        = e.height || '';
+    document.getElementById('camSun').value           = e.sun || '';
+    document.getElementById('camWater').value         = e.water || '';
+    document.getElementById('camShu').value           = e.shu != null ? e.shu : '';
+    document.getElementById('catalogAddModal').classList.add('open');
+}
+
+function closeCatalogAddModal() {
+    document.getElementById('catalogAddModal').classList.remove('open');
+}
+
+async function saveCatalogEntry() {
+    const nome = document.getElementById('camName').value.trim();
+    if (!nome) return alert('Indica o nome da variedade.');
+    const img  = document.getElementById('camImg').value.trim() || IMG_DEFAULT;
+    const shuRaw = document.getElementById('camShu').value.trim();
+    const payload = {
+        user_id:          currentUserId,
+        nome,
+        img,
+        categoria:        document.getElementById('camCat').value,
+        desc:             document.getElementById('camDesc').value.trim(),
+        sow_in:           document.getElementById('camSowIn').value.trim() || null,
+        sow_out:          document.getElementById('camSowOut').value.trim() || null,
+        plant:            document.getElementById('camPlant').value.trim() || null,
+        harvest:          document.getElementById('camHarvest').value.trim() || null,
+        germ_days:        document.getElementById('camGermDays').value.trim() || null,
+        days_to_harvest:  document.getElementById('camDaysToHarvest').value.trim() || null,
+        spacing:          document.getElementById('camSpacing').value.trim() || null,
+        height:           document.getElementById('camHeight').value.trim() || null,
+        sun:              document.getElementById('camSun').value || null,
+        water:            document.getElementById('camWater').value || null,
+        shu:              shuRaw !== '' ? parseInt(shuRaw) : null,
+    };
+    const editId = document.getElementById('catalogEditId').value;
+    if (editId) {
+        const { error } = await _supabase.from('catalog_entries').update(payload).eq('id', editId);
+        if (error) return alert('Erro ao guardar: ' + error.message);
+    } else {
+        const { error } = await _supabase.from('catalog_entries').insert([payload]);
+        if (error) return alert('Erro ao adicionar: ' + error.message);
+    }
+    closeCatalogAddModal();
+    await loadCatalogCustom();
+    catalogTabInit();
+}
+
+// Backdrop close for catalog modals
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('catalogDetailModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeCatalogDetailModal();
+    });
+    document.getElementById('catalogAddModal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeCatalogAddModal();
+    });
+});
