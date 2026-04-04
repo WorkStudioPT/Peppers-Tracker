@@ -11,49 +11,41 @@ const SUPABASE_URL = 'https://bjvjojpjhyujhyatrxlz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_dvUvVnNBD2yKxKS_Y30b2w_KDozTYOE';
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Catálogo ordenado por SHU (Scoville Heat Units)
-let CATALOGO = [
-    // SHU 0: Não picantes
-    { nome: "Tomate",                img: "imagens/tomate.webp",           shu: 0 },
-    { nome: "Tomate Cherry",         img: "imagens/tomate_cherry.webp",    shu: 0 },
-    { nome: "Pimento Vermelho",      img: "imagens/pimento_vermelho.webp", shu: 0 },
-    { nome: "Pimento Laranja",       img: "imagens/pimento_laranja.webp",  shu: 0 },
-    { nome: "Pimento Amarelo",       img: "imagens/pimento_amarelo.webp",  shu: 0 },
-    { nome: "Pimento Verde",         img: "imagens/pimento_verde.webp",    shu: 0 },
-
-    // SHU 2.500 - 10.000: Moderadas
-    { nome: "Jalapeño",              img: "imagens/jalapeno.webp",         shu: 5000 },
-    { nome: "Serrano",               img: "imagens/default.webp",          shu: 15000 },
-
-    // SHU 100.000 - 350.000: Fortes
-    { nome: "Tangerine Tiger",       img: "imagens/default.webp",          shu: 100000 },
-    { nome: "Puma",                  img: "imagens/default.webp",          shu: 300000 },
-    { nome: "Habanero Laranja",      img: "imagens/default.webp",          shu: 325000 },
-    { nome: "Habanero Yellow",       img: "imagens/default.webp",          shu: 325000 },
-    { nome: "Habanero Vermelho",     img: "imagens/habanero_vermelho.webp", shu: 350000 },
-    { nome: "Habanero Caramel",      img: "imagens/default.webp",          shu: 350000 },
-
-    // SHU 1.000.000+: Nucleares
-    { nome: "Ghost Pepper",          img: "imagens/default.webp",          shu: 1041427 },
-    { nome: "Carolina Reaper",       img: "imagens/carolina_reaper.webp",  shu: 2200000 },
-];
-
-const CATALOGO_BASE_COUNT = CATALOGO.length;
-
-let catalogCustom = []; // entries from Supabase
+// ── CATALOGO — fonte única de verdade, carregado da BD ──────────────
+// Alimenta automaticamente: Tracker (datalist), Tabuleiros (picker), NFC (datalist)
+// Entradas base (is_base=true) são partilhadas por todos os utilizadores via RLS
+let CATALOGO     = [];  // todas as entradas: base + custom do utilizador
+let catalogCustom = []; // apenas entradas custom (is_base=false) do utilizador
 
 async function loadCatalogCustom() {
     const { data, error } = await _supabase
         .from('catalog_entries')
         .select('*')
-        .order('id', { ascending: true });
-    if (error) return;
-    catalogCustom = data || [];
-    // Merge: rebuild CATALOGO = base + custom (for tracker datalist and tray picker)
-    CATALOGO = [
-        ...CATALOGO.slice(0, CATALOGO_BASE_COUNT),
-        ...catalogCustom.map(e => ({ nome: e.nome, img: e.img || IMG_DEFAULT, id: e.id, custom: true }))
-    ];
+        .order('is_base', { ascending: false }) // base primeiro
+        .order('id',      { ascending: true });
+    if (error) { console.error('[CATALOG] Erro ao carregar:', error.message); return; }
+    const entries = data || [];
+    CATALOGO      = entries.map(e => ({
+        nome:            e.nome,
+        img:             e.img || IMG_DEFAULT,
+        shu:             e.shu ?? null,
+        id:              e.id,
+        is_base:         !!e.is_base,
+        categoria:       e.categoria || 'Outro',
+        descricao:       e.descricao || '',
+        sow_in:          e.sow_in    || null,
+        sow_out:         e.sow_out   || null,
+        plant:           e.plant     || null,
+        harvest:         e.harvest   || null,
+        germ_days:       e.germ_days || null,
+        days_to_harvest: e.days_to_harvest || null,
+        spacing:         e.spacing   || null,
+        height:          e.height    || null,
+        sun:             e.sun       || null,
+        water:           e.water     || null,
+    }));
+    catalogCustom = entries.filter(e => !e.is_base);
+    // Atualizar todos os sítios que dependem do catálogo
     loadCatalog();
     nfcPopulateCatalog();
     tRenderCatalogPicker();
@@ -99,6 +91,26 @@ function renderCatalogManager() {
 
 const IMG_DEFAULT = "imagens/default.webp";
 
+// ── IMAGE LIGHTBOX ────────────────────────────────────────────────
+function openLightbox(src, e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    const lb  = document.getElementById('imgLightbox');
+    const img = document.getElementById('imgLightboxImg');
+    if (!lb || !img) return;
+    img.src = src;
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+    const lb = document.getElementById('imgLightbox');
+    if (!lb) return;
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+
+
 // Devolve a imagem do catálogo para um nome de semente
 function getImgForSeed(name) {
     if (!name) return IMG_DEFAULT;
@@ -141,6 +153,9 @@ _supabase.auth.onAuthStateChange((event, session) => {
                 switchTab('nfc');
                 const tag = nfcTags.find(t => t.id == nfcId);
                 nfcShowResultModal(tag, tag ? null : { raw: 'ID: ' + nfcId }, null);
+            } else {
+                const saved = localStorage.getItem('activeTab');
+                if (saved && saved !== 'tracker') switchTab(saved);
             }
         });
     } else {
@@ -214,6 +229,7 @@ function toggleDark() {
 // ════════════════════════════════════════════════════════
 
 async function switchTab(tab) {
+    localStorage.setItem('activeTab', tab);
     ['tracker', 'tray', 'catalogo', 'nfc'].forEach(t => {
         document.getElementById(`panel-${t}`).style.display = t === tab ? '' : 'none';
         document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
@@ -1221,7 +1237,7 @@ function tRenderTrays() {
         return `
             <details class="collapsible-section tray-sortable" data-tray-id="${tray.id}" ${shouldBeOpen ? 'open' : ''}>
                 <summary class="collapsible-header">
-                    <div style="display:flex;align-items:center;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
                         <span class="tray-drag-handle" title="Arrastar para reordenar"
                             onpointerdown="tTrayDragStart(event, ${tray.id})"
                             onclick="event.stopPropagation();event.preventDefault()">⠿</span>
@@ -1957,196 +1973,14 @@ const CAT_META = {
     'Picantes':         { emoji: '🌶️', color: '#e53e3e', bg: '#fdf0ee' },
     'Legumes':          { emoji: '🥦', color: '#2980b9', bg: '#e8f2fb' },
     'Frutos':           { emoji: '🍅', color: '#e8a020', bg: '#fef4e8' },
-    'Tubérculos':       { emoji: '🥕', color: '#d4730a', bg: '#fef4e8' },
+    'Tubérculos':       { emoji: '🥔', color: '#b47d06', bg: '#fef4e8' },
+    'Bolbo':            { emoji: '🧅', color: '#c07f39', bg: '#fef4e8' },
     'Flores':           { emoji: '🌸', color: '#8e44ad', bg: '#f5eaf9' },
     'Outro':            { emoji: '📦', color: '#7f8c8d', bg: '#f2f0eb' },
 };
 
 const MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-// ── Catálogo base — variedades embutidas com info detalhada
-const CATALOG_BASE = [
-    // ── ERVAS AROMÁTICAS ──────────────────────────────
-    {
-        nome: 'Manjericão', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Erva aromática mediterrânea, essencial para pesto e saladas. Sensível ao frio.',
-        sow_in: '2-4', sow_out: '4-6', plant: '5-6', harvest: '6-10',
-        germ_days: '7-14', days_to_harvest: '60-75', spacing: '20-30', height: '30-60',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Salsa', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Bienal muito versátil, rica em vitamina C e ferro. Prefere solos húmidos.',
-        sow_in: '2-4', sow_out: '3-6', plant: '4-6', harvest: '5-11',
-        germ_days: '14-28', days_to_harvest: '70-90', spacing: '15-20', height: '30-45',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Coentros', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Erva de crescimento rápido, tipicamente portuguesa. Floresce depressa no calor.',
-        sow_in: '2-4', sow_out: '3-5', plant: '4-5', harvest: '5-9',
-        germ_days: '7-10', days_to_harvest: '45-70', spacing: '15-20', height: '20-50',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Tomilho', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Arbusto perene resistente à seca. Excelente para carnes e marinadas.',
-        sow_in: '2-3', sow_out: '4-5', plant: '4-6', harvest: '5-11',
-        germ_days: '14-21', days_to_harvest: '90-120', spacing: '20-30', height: '15-30',
-        sun: 'Sol pleno', water: 'Baixa', shu: null
-    },
-    {
-        nome: 'Alecrim', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Arbusto mediterrâneo perene. Tolera bem a seca e solos pobres.',
-        sow_in: '2-4', sow_out: '4-5', plant: '4-6', harvest: '1-12',
-        germ_days: '14-28', days_to_harvest: '90-120', spacing: '50-80', height: '50-150',
-        sun: 'Sol pleno', water: 'Baixa', shu: null
-    },
-    {
-        nome: 'Hortelã', categoria: 'Ervas Aromáticas', img: 'imagens/default.webp',
-        desc: 'Perene invasiva, melhor cultivada em vaso. Muito aromática e versátil.',
-        sow_in: '2-3', sow_out: '3-5', plant: '4-6', harvest: '4-10',
-        germ_days: '10-16', days_to_harvest: '60-90', spacing: '30-40', height: '30-60',
-        sun: 'Meia-sombra', water: 'Alta', shu: null
-    },
-    // ── PICANTES ──────────────────────────────────────
-    {
-        nome: 'Jalapeño', categoria: 'Picantes', img: 'imagens/jalapeno.webp',
-        desc: 'Pimento mexicano de picante moderado. Muito popular em culinária e conservas.',
-        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
-        germ_days: '7-14', days_to_harvest: '70-85', spacing: '40-50', height: '60-90',
-        sun: 'Sol pleno', water: 'Moderada', shu: 5000
-    },
-    {
-        nome: 'Habanero Vermelho', categoria: 'Picantes', img: 'imagens/habanero_vermelho.webp',
-        desc: 'Originário das Caraíbas. Aroma frutado único com calor intenso.',
-        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
-        germ_days: '14-21', days_to_harvest: '90-100', spacing: '45-60', height: '60-120',
-        sun: 'Sol pleno', water: 'Moderada', shu: 350000
-    },
-    {
-        nome: 'Carolina Reaper', categoria: 'Picantes', img: 'imagens/carolina_reaper.webp',
-        desc: 'Record mundial de picante. Desenvolvida nos EUA. Para utilizadores experientes.',
-        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
-        germ_days: '14-28', days_to_harvest: '100-120', spacing: '50-70', height: '60-100',
-        sun: 'Sol pleno', water: 'Moderada', shu: 2200000
-    },
-    {
-        nome: 'Ghost Pepper', categoria: 'Picantes', img: 'imagens/default.webp',
-        desc: 'Bhut Jolokia — pimento indiano extremamente picante. Cresce bem em clima quente.',
-        sow_in: '1-2', sow_out: null, plant: '4-5', harvest: '8-10',
-        germ_days: '21-35', days_to_harvest: '100-120', spacing: '50-60', height: '60-120',
-        sun: 'Sol pleno', water: 'Moderada', shu: 1041427
-    },
-    {
-        nome: 'Serrano', categoria: 'Picantes', img: 'imagens/default.webp',
-        desc: 'Pimento mexicano mais picante que o jalapeño. Excelente para salsas frescas.',
-        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
-        germ_days: '7-14', days_to_harvest: '75-90', spacing: '40-50', height: '45-60',
-        sun: 'Sol pleno', water: 'Moderada', shu: 15000
-    },
-    // ── LEGUMES ───────────────────────────────────────
-    {
-        nome: 'Alface', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'Cultura de folha rápida, ideal para iniciantes. Prefere temperaturas amenas.',
-        sow_in: '2-4', sow_out: '3-9', plant: '3-10', harvest: '4-11',
-        germ_days: '4-10', days_to_harvest: '45-60', spacing: '20-30', height: '20-35',
-        sun: 'Meia-sombra', water: 'Alta', shu: null
-    },
-    {
-        nome: 'Cenoura', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'Raiz saborosa rica em beta-caroteno. Prefere solos soltos e profundos.',
-        sow_in: null, sow_out: '2-7', plant: null, harvest: '5-11',
-        germ_days: '10-21', days_to_harvest: '70-90', spacing: '5-8', height: '20-30',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Alho-francês', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'Versátil e tolerante ao frio. Pode ficar no solo durante meses.',
-        sow_in: '2-3', sow_out: '3-4', plant: '5-7', harvest: '10-3',
-        germ_days: '10-14', days_to_harvest: '120-150', spacing: '10-15', height: '30-60',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Feijão-verde', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'De crescimento rápido, variedades anãs ou trepadeiras. Semente direta.',
-        sow_in: null, sow_out: '4-7', plant: '4-7', harvest: '7-10',
-        germ_days: '6-12', days_to_harvest: '55-70', spacing: '10-15', height: '30-200',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Ervilha', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'Trepadeira de estação fria. Muito produtiva quando bem tutorada.',
-        sow_in: '1-2', sow_out: '2-4', plant: '2-4', harvest: '5-7',
-        germ_days: '5-10', days_to_harvest: '60-70', spacing: '5-8', height: '60-180',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Courgette', categoria: 'Legumes', img: 'imagens/default.webp',
-        desc: 'Planta produtiva de verão. Uma planta pode bastar para a família.',
-        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-10',
-        germ_days: '5-10', days_to_harvest: '50-70', spacing: '80-100', height: '30-50',
-        sun: 'Sol pleno', water: 'Alta', shu: null
-    },
-    // ── FRUTOS ────────────────────────────────────────
-    {
-        nome: 'Tomate', categoria: 'Frutos', img: 'imagens/tomate.webp',
-        desc: 'Fruto de verão por excelência. Variedades para todos os gostos e usos.',
-        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
-        germ_days: '6-14', days_to_harvest: '70-85', spacing: '50-80', height: '60-200',
-        sun: 'Sol pleno', water: 'Alta', shu: null
-    },
-    {
-        nome: 'Tomate Cherry', categoria: 'Frutos', img: 'imagens/tomate_cherry.webp',
-        desc: 'Tomates pequenos e doces, muito produtivos. Ótimos para saladas e petiscos.',
-        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
-        germ_days: '6-12', days_to_harvest: '60-70', spacing: '40-60', height: '60-150',
-        sun: 'Sol pleno', water: 'Alta', shu: null
-    },
-    {
-        nome: 'Pimento Vermelho', categoria: 'Frutos', img: 'imagens/pimento_vermelho.webp',
-        desc: 'Pimento doce vermelho, rico em vitamina C. Amadurece lentamente.',
-        sow_in: '1-3', sow_out: null, plant: '4-5', harvest: '7-10',
-        germ_days: '7-14', days_to_harvest: '70-90', spacing: '40-50', height: '60-90',
-        sun: 'Sol pleno', water: 'Moderada', shu: 0
-    },
-    {
-        nome: 'Pepino', categoria: 'Frutos', img: 'imagens/default.webp',
-        desc: 'Cultura de verão que adora calor. Cresce bem em treliça.',
-        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-9',
-        germ_days: '5-10', days_to_harvest: '50-65', spacing: '30-50', height: '100-200',
-        sun: 'Sol pleno', water: 'Alta', shu: null
-    },
-    {
-        nome: 'Melancia', categoria: 'Frutos', img: 'imagens/default.webp',
-        desc: 'Fruto de verão que precisa de muito espaço e calor. Vale a pena!',
-        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '7-9',
-        germ_days: '7-14', days_to_harvest: '80-100', spacing: '120-180', height: '30-60',
-        sun: 'Sol pleno', water: 'Alta', shu: null
-    },
-    // ── TUBÉRCULOS ────────────────────────────────────
-    {
-        nome: 'Alho', categoria: 'Tubérculos', img: 'imagens/default.webp',
-        desc: 'Plantado no outono para colheita de verão. Fácil e muito útil na cozinha.',
-        sow_in: null, sow_out: '10-11', plant: '10-11', harvest: '6-7',
-        germ_days: '7-14', days_to_harvest: '240-280', spacing: '10-15', height: '30-60',
-        sun: 'Sol pleno', water: 'Baixa', shu: null
-    },
-    {
-        nome: 'Cebola', categoria: 'Tubérculos', img: 'imagens/default.webp',
-        desc: 'Cultura de longa duração. Semeada no outono ou primavera.',
-        sow_in: '1-2', sow_out: '8-10', plant: '3-4', harvest: '6-8',
-        germ_days: '10-14', days_to_harvest: '100-150', spacing: '10-15', height: '30-50',
-        sun: 'Sol pleno', water: 'Moderada', shu: null
-    },
-    {
-        nome: 'Batata-doce', categoria: 'Tubérculos', img: 'imagens/default.webp',
-        desc: 'Tubérculo tropical muito nutritivo. Adora calor e solos bem drenados.',
-        sow_in: '3-4', sow_out: null, plant: '5-6', harvest: '9-11',
-        germ_days: '14-21', days_to_harvest: '120-150', spacing: '30-40', height: '20-30',
-        sun: 'Sol pleno', water: 'Baixa', shu: null
-    },
-];
 
 // ── Estado do catálogo tab ─────────────────────────────
 let catalogTabEntries = []; // merged base + custom
@@ -2154,22 +1988,14 @@ let catalogActiveCat  = 'Todos';
 let catalogDetailId   = null; // id or index being viewed
 
 function catalogTabInit() {
-    // Merge base + custom
-    catalogTabEntries = [
-        ...CATALOG_BASE.map((e, i) => ({ ...e, _id: `base_${i}`, _custom: false })),
-        ...catalogCustom.map(e => ({
-            nome: e.nome, img: e.img,
-            categoria: e.categoria || 'Outro',
-            desc: e.desc || '',
-            sow_in: e.sow_in || null, sow_out: e.sow_out || null,
-            plant: e.plant || null, harvest: e.harvest || null,
-            germ_days: e.germ_days || null, days_to_harvest: e.days_to_harvest || null,
-            spacing: e.spacing || null, height: e.height || null,
-            sun: e.sun || null, water: e.water || null,
-            shu: e.shu != null ? e.shu : null,
-            _id: `custom_${e.id}`, _custom: true, _dbId: e.id
-        }))
-    ];
+    // CATALOGO ja tem tudo da BD (base + custom) carregado por loadCatalogCustom
+    catalogTabEntries = CATALOGO.map(e => ({
+        ...e,
+        desc:    e.descricao || '',
+        _id:     `db_${e.id}`,
+        _custom: !e.is_base,
+        _dbId:   e.id
+    }));
     catalogRenderPills();
     catalogFilterRender();
 }
@@ -2206,7 +2032,7 @@ function catalogFilterRender() {
     }
     if (search) {
         entries = entries.filter(e => e.nome.toLowerCase().includes(search) ||
-            (e.desc || '').toLowerCase().includes(search));
+            (e.descricao || '').toLowerCase().includes(search));
     }
     catalogRenderGrid(entries);
 }
@@ -2263,7 +2089,9 @@ function catalogCardHTML(e) {
         <div style="display:flex;gap:12px;align-items:flex-start">
             <div style="width:52px;height:52px;border-radius:10px;background:${meta.bg};border:1px solid ${meta.color}22;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
                 <img src="${e.img || 'imagens/default.webp'}" alt="${e.nome}"
+                    class="img-zoomable"
                     style="width:100%;height:100%;object-fit:contain"
+                    onclick="openLightbox(this.src, event)"
                     onerror="this.src='imagens/default.webp'">
             </div>
             <div style="flex:1;min-width:0">
@@ -2277,7 +2105,7 @@ function catalogCardHTML(e) {
                 ${e.germ_days ? `<div style="font-size:10px;color:var(--text-faint);margin-top:3px">🌱 Germ. ${e.germ_days} dias</div>` : ''}
             </div>
         </div>
-        ${e.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${e.desc}</div>` : ''}
+        ${e.descricao ? `<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${e.descricao}</div>` : ''}
     </div>`;
 }
 
@@ -2303,7 +2131,7 @@ function openCatalogDetail(id) {
     document.getElementById('cdName').textContent = e.nome;
     document.getElementById('cdCatBadge').innerHTML =
         `<span style="font-size:11px;font-weight:700;color:${meta.color}">${meta.emoji} ${e.categoria}</span>`;
-    document.getElementById('cdDesc').textContent = e.desc || '';
+    document.getElementById('cdDesc').textContent = e.descricao || '';
 
     // SHU
     const shuEl = document.getElementById('cdShu');
@@ -2439,7 +2267,7 @@ function openEditCatalogModal(dbId) {
     document.getElementById('catalogEditId').value = dbId;
     document.getElementById('camName').value          = e.nome || '';
     document.getElementById('camCat').value           = e.categoria || 'Outro';
-    document.getElementById('camDesc').value          = e.desc || '';
+    document.getElementById('camDesc').value          = e.descricao || '';
     document.getElementById('camImg').value           = e.img === IMG_DEFAULT ? '' : (e.img || '');
     document.getElementById('camSowIn').value         = e.sow_in || '';
     document.getElementById('camSowOut').value        = e.sow_out || '';
@@ -2469,7 +2297,7 @@ async function saveCatalogEntry() {
         nome,
         img,
         categoria:        document.getElementById('camCat').value,
-        desc:             document.getElementById('camDesc').value.trim(),
+        descricao:        document.getElementById('camDesc').value.trim(),
         sow_in:           document.getElementById('camSowIn').value.trim() || null,
         sow_out:          document.getElementById('camSowOut').value.trim() || null,
         plant:            document.getElementById('camPlant').value.trim() || null,
@@ -2504,3 +2332,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === this) closeCatalogAddModal();
     });
 });
+
+function getSeedImg(s) {
+    // Tenta primeiro o catálogo (fonte de verdade)
+    const fromCatalog = CATALOGO.find(c => c.nome.toLowerCase() === (s.name || '').toLowerCase());
+    if (fromCatalog && fromCatalog.img && fromCatalog.img !== IMG_DEFAULT) {
+        return fromCatalog.img;
+    }
+    // Fallback: imagem guardada na própria seed
+    if (s.img && s.img !== IMG_DEFAULT) return s.img;
+    return IMG_DEFAULT;
+}

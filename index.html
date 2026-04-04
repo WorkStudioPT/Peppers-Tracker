@@ -368,7 +368,9 @@
     <div class="modal-box" style="max-width:480px;max-height:88vh;overflow-y:auto">
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
             <div style="width:72px;height:72px;border-radius:12px;background:var(--bg-subtle);border:1px solid var(--border);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
-                <img id="cdImg" style="width:100%;height:100%;object-fit:contain" onerror="this.src='imagens/default.webp'">
+                <img id="cdImg" class="img-zoomable" style="width:100%;height:100%;object-fit:contain"
+                    onclick="openLightbox(this.src, event)"
+                    onerror="this.src='imagens/default.webp'">
             </div>
             <div style="flex:1">
                 <div id="cdName" style="font-family:'Lora',serif;font-size:20px;font-weight:700"></div>
@@ -406,7 +408,8 @@
                         <option value="Picantes">🌶️ Picantes</option>
                         <option value="Legumes">🥦 Legumes</option>
                         <option value="Frutos">🍅 Frutos</option>
-                        <option value="Tubérculos">🥕 Tubérculos</option>
+                        <option value="Tubérculos">🥔 Tubérculos</option>
+                        <option value="Bolbos">🧅 Bolbos</option>
                         <option value="Flores">🌸 Flores</option>
                         <option value="Outro">📦 Outro</option>
                     </select>
@@ -498,6 +501,20 @@
 <div style="display:none">
     <input id="catalogNewName"><input id="catalogNewImg">
     <div id="catalogManagerList"></div>
+</div>
+
+
+<!-- LIGHTBOX: Image zoom -->
+<div id="imgLightbox" onclick="closeLightbox()" style="
+    display:none; position:fixed; inset:0; z-index:99999;
+    background:rgba(0,0,0,0.85); backdrop-filter:blur(4px);
+    align-items:center; justify-content:center; cursor:zoom-out;
+    padding:24px;">
+    <img id="imgLightboxImg" src="" alt=""
+        style="max-width:min(90vw,480px); max-height:80vh;
+               object-fit:contain; border-radius:16px;
+               box-shadow:0 24px 64px rgba(0,0,0,0.6);
+               animation:lightboxIn 0.18s ease;">
 </div>
 
 <!-- SCRIPTS -->
